@@ -6,7 +6,7 @@ from ultralytics import YOLO
 model = YOLO(r"D:\Code\BU-ELEPHENT-HACKATHON\model\elephant_obj_detect.pt")
 
 # เปิดวิดีโอ
-cap = cv2.VideoCapture(r"\Videos\rus.MP4")
+cap = cv2.VideoCapture(r"Videos\rus.MP4")
 
 
 # โฟลเดอร์เก็บภาพ
