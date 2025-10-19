@@ -1,3 +1,4 @@
 /Videos
-/Elephant_image
-/model
+*.pt
+*.pth
+*.jpg
