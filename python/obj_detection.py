@@ -3,11 +3,11 @@ from ultralytics import YOLO
 
 model = YOLO(r"model\elephant_obj_detect.pt")
 
-cap = cv2.VideoCapture("Videos\รัศมี.MP4")
+cap = cv2.VideoCapture(r"Videos\rus.MP4")
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-CONFIDENCE_THRESHOLD = 0.7
+CONFIDENCE_THRESHOLD = 0.85
 
 while True:
     ret, frame = cap.read()
