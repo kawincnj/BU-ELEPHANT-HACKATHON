@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>อัปโหลดรูปภาพ/วิดีโอช้าง</title>
+    
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .container {
+            background-color: white;
+            padding: 30px;
+            margin: 20px auto;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+        }
+
+        h1 {
+            color: #1877f2;
+        }
+        
+        /* สไตล์สำหรับปุ่มเลือกประเภท */
+        .selection-area button {
+            background-color: #f0f0f0;
+            color: #333;
+            padding: 10px 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 10px;
+            transition: background-color 0.3s;
+        }
+
+        .selection-area button:hover {
+            background-color: #e0e0e0;
+        }
+        
+        .selection-area button.active {
+            background-color: #1877f2;
+            color: white;
+            border-color: #1877f2;
+        }
+        
+        .upload-area {
+            display: none; /* ซ่อนช่องอัปโหลดเริ่มต้น */
+            border: 2px dashed #ccc;
+            padding: 20px;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+        
+        #imagePreview {
+            display: none;
+            width: 100%;
+            max-height: 300px;
+            object-fit: contain;
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Upload your Elephant file 🐘</h1>
+        <p>Please select the file type first:</p>
+
+        <div class="selection-area">
+            <button id="selectImage">Upload Image 🖼️</button>
+            <button id="selectVideo">Upload Video 🎥</button>
+        </div>
+        <hr style="margin-top: 20px;">
+        
+        <div class="upload-area" id="mainUploadArea">
+            <p id="uploadTypeText" style="font-weight: bold;">กรุณาเลือกไฟล์...</p>
+            
+            <input 
+                type="file" 
+                id="fileUploader" 
+                accept="" 
+            >
+            
+            <p style="font-size: small; color: gray;">รองรับไฟล์ที่เลือกไว้เท่านั้น</p>
+        </div>
+        
+        <img id="imagePreview" src="#" alt="ตัวอย่างรูปภาพที่อัปโหลด">
+        
+        <button id="continueButton" style="background-color: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 5px; margin-top: 25px; cursor: pointer; font-size: 18px;">
+            Continue
+        </button>
+    </div>
+
+    <script>
+        const selectImageButton = document.getElementById('selectImage');
+        const selectVideoButton = document.getElementById('selectVideo');
+        const mainUploadArea = document.getElementById('mainUploadArea');
+        const fileUploader = document.getElementById('fileUploader');
+        const uploadTypeText = document.getElementById('uploadTypeText');
+        const imagePreview = document.getElementById('imagePreview');
+        const continueButton = document.getElementById('continueButton'); 
+        
+        let currentFileType = null; // เก็บประเภทไฟล์ที่ผู้ใช้เลือก
+
+        // ----------------------------------------------------
+        // 1. ฟังก์ชันจัดการการเลือกประเภท
+        // ----------------------------------------------------
+        function setFileType(type) {
+            currentFileType = type;
+            mainUploadArea.style.display = 'block'; // แสดงช่องอัปโหลด
+            imagePreview.style.display = 'none';    // ซ่อนรูปภาพตัวอย่างเดิม
+            fileUploader.value = '';                // ล้างไฟล์ที่เลือกไว้ก่อนหน้า
+
+            // อัปเดต UI และ attributes ของ input
+            if (type === 'image') {
+                selectImageButton.classList.add('active');
+                selectVideoButton.classList.remove('active');
+                uploadTypeText.textContent = 'เลือกไฟล์รูปภาพ (Image)';
+                fileUploader.setAttribute('accept', 'image/*');
+            } else if (type === 'video') {
+                selectImageButton.classList.remove('active');
+                selectVideoButton.classList.add('active');
+                uploadTypeText.textContent = 'เลือกไฟล์วิดีโอ (Video)';
+                fileUploader.setAttribute('accept', 'video/*');
+            }
+        }
+
+        selectImageButton.addEventListener('click', () => setFileType('image'));
+        selectVideoButton.addEventListener('click', () => setFileType('video'));
+
+        // ----------------------------------------------------
+        // 2. ฟังก์ชันแสดงตัวอย่าง (สำหรับรูปภาพเท่านั้น)
+        // ----------------------------------------------------
+        fileUploader.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            
+            if (file && currentFileType === 'image') {
+                // แสดงตัวอย่างสำหรับรูปภาพ
+                const reader = new FileReader(); 
+                reader.onload = function(e) {
+                    imagePreview.src = e.target.result; 
+                    imagePreview.style.display = 'block'; 
+                };
+                reader.readAsDataURL(file);
+            } else {
+                // ซ่อนตัวอย่างถ้าเป็นวิดีโอหรือไม่มีไฟล์
+                imagePreview.src = '#';
+                imagePreview.style.display = 'none';
+            }
+        });
+
+        // ----------------------------------------------------
+        // 3. ฟังก์ชันนำทาง (เพิ่มการตรวจสอบไฟล์)
+        // ----------------------------------------------------
+        continueButton.addEventListener('click', function() {
+            if (!currentFileType) {
+                alert('กรุณาเลือกประเภทไฟล์ก่อน (Image หรือ Video)!');
+                return;
+            }
+            
+            if (fileUploader.files.length === 0) {
+                alert('กรุณาเลือกไฟล์ก่อนกด Continue!');
+                return;
+            }
+            
+            // ในการใช้งานจริง, คุณจะส่งไฟล์นี้ไปยัง Backend ด้วย FormData และ Fetch/AJAX
+            // แต่สำหรับตัวอย่างนี้ เราจะเปลี่ยนหน้าไปที่ output.html
+            console.log(`File selected: ${fileUploader.files[0].name}, Type: ${currentFileType}`);
+            window.location.href = 'output.html';
+        });
+    </script>
+</body>
+</html>
