@@ -10,3 +10,5 @@
 ## torchvision
 ## ultralytics
 ## opencv-python
+
+### (Please don't judge me I don't know how to write README.md)
