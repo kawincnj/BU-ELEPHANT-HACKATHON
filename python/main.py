@@ -34,7 +34,7 @@ class TNIModel(torch.nn.Module):
 # Load TNI Model
 # -------------------------------
 tni_model = TNIModel(embedding_dim=128).to(device)
-tni_model.load_state_dict(torch.load(r"model\modeltni_elephant_model.pth", 
+tni_model.load_state_dict(torch.load(r"D:\CODING\BU-ELEPHANT-HACKATHON\model\modeltni_elephant_model.pth", 
                                       map_location=device, 
                                       weights_only=True))
 tni_model.eval()
@@ -42,7 +42,7 @@ tni_model.eval()
 # -------------------------------
 # Load YOLO Model
 # -------------------------------
-yolo_model = YOLO(r"model\elephant_obj_detect.pt")
+yolo_model = YOLO(r"D:\CODING\BU-ELEPHANT-HACKATHON\model\elephant_obj_detect.pt")
 
 # -------------------------------
 # Image transform for identification
@@ -56,7 +56,7 @@ transform = transforms.Compose([
 # -------------------------------
 # Load reference embeddings
 # -------------------------------
-reference_embeddings = torch.load(r"model\reference_embeddings.pt", 
+reference_embeddings = torch.load(r"D:\CODING\BU-ELEPHANT-HACKATHON\model\reference_embeddings.pt", 
                                    map_location=device, 
                                    weights_only=True)
 
