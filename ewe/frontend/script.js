@@ -1,7 +1,10 @@
 const API_RUN_MAIN = "http://localhost:8000/run-main";
 
-const selectImageButton = document.getElementById('selectImage');
-const selectVideoButton = document.getElementById('selectVideo');
+// Elements
+const openModalBtn = document.getElementById('openModalBtn');
+const uploadModal = document.getElementById('uploadModal');
+const closeModal = document.getElementById('closeModal');
+
 const mainUploadArea = document.getElementById('mainUploadArea');
 const fileUploader = document.getElementById('fileUploader');
 const uploadTypeText = document.getElementById('uploadTypeText');
@@ -13,7 +16,6 @@ const statusText = document.getElementById('statusText');
 const resultsCard = document.getElementById('resultsCard');
 const resultsList = document.getElementById('resultsList');
 
-let currentFileType = null;
 let overlayCanvas, overlayCtx;
 
 function ensureCanvas() {
@@ -68,31 +70,28 @@ function drawDetections(dets, naturalW, naturalH) {
   });
 }
 
-function setFileType(type) {
-  currentFileType = type;
-  mainUploadArea.style.display = 'block';
-  imagePreview.style.display = 'none';
-  fileUploader.value = '';
-
-  if (type === 'image') {
-    selectImageButton.classList.add('active');
-    selectVideoButton.classList.remove('active');
-    uploadTypeText.textContent = 'เลือกไฟล์รูปภาพ (Image)';
-    fileUploader.setAttribute('accept', 'image/*');
-  } else {
-    selectImageButton.classList.remove('active');
-    selectVideoButton.classList.add('active');
-    uploadTypeText.textContent = 'เลือกไฟล์วิดีโอ (Video)';
-    fileUploader.setAttribute('accept', 'video/*');
-  }
+// Modal controls
+function openModal() {
+  uploadModal.style.display = 'flex';
+  uploadModal.setAttribute('aria-hidden', 'false');
 }
+function closeModalFn() {
+  uploadModal.style.display = 'none';
+  uploadModal.setAttribute('aria-hidden', 'true');
+}
+openModalBtn?.addEventListener('click', openModal);
+closeModal?.addEventListener('click', closeModalFn);
+uploadModal?.addEventListener('click', (e) => {
+  if (e.target === uploadModal) closeModalFn();
+});
 
-selectImageButton.addEventListener('click', () => setFileType('image'));
-selectVideoButton.addEventListener('click', () => setFileType('video'));
-
+// Handle file selection (image or video)
 fileUploader.addEventListener('change', (event) => {
   const file = event.target.files[0];
-  if (file && currentFileType === 'image') {
+  if (!file) return;
+  const isImage = file.type.startsWith('image/');
+
+  if (isImage) {
     const reader = new FileReader();
     reader.onload = (e) => {
       imagePreview.src = e.target.result;
@@ -104,13 +103,14 @@ fileUploader.addEventListener('change', (event) => {
     };
     reader.readAsDataURL(file);
   } else {
+    // Hide preview for non-image files (e.g., video)
     imagePreview.src = '#';
     imagePreview.style.display = 'none';
     clearCanvas();
   }
 });
 
-function setLoading(on, msg = 'กำลังประมวลผล…') {
+function setLoading(on, msg = 'Predicting...') {
   statusRow.style.display = on ? 'block' : 'none';
   statusText.textContent = msg;
   predictButton.disabled = on;
@@ -168,24 +168,58 @@ predictButton.addEventListener('click', async () => {
   hideList();
   clearCanvas();
 
-  if (!currentFileType) {
-    alert('กรุณาเลือกประเภทไฟล์ก่อน (Image หรือ Video)!');
-    return;
-  }
   const file = fileUploader.files[0];
   if (!file) {
-    alert('กรุณาเลือกไฟล์ก่อนกด Predict!');
+    alert('Please select a file before Predicting!');
+    return;
+  }
+
+  const isImage = file.type.startsWith('image/');
+  const isVideo = file.type.startsWith('video/');
+  if (!isImage && !isVideo) {
+    alert('File format not supported.');
     return;
   }
 
   try {
-    setLoading(true, 'กำลังประมวลผล…');
+    setLoading(true, 'Predicting...');
 
     let toSend = file;
-    if (currentFileType === 'video') {
-      setLoading(true, 'กำลังดึงเฟรมจากวิดีโอ…');
+    if (isVideo) {
+      setLoading(true, 'Pulling frame from video...');
       toSend = await extractVideoFrame(file);
-      setLoading(true, 'กำลังประมวลผล…');
+
+      // Show the extracted frame as preview
+      await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          imagePreview.src = e.target.result;
+          imagePreview.onload = () => {
+            imagePreview.style.display = 'block';
+            ensureCanvas();
+            clearCanvas();
+            resolve();
+          };
+        };
+        reader.readAsDataURL(toSend);
+      });
+
+      setLoading(true, 'Predicting...');
+    } else if (isImage && (!imagePreview.src || imagePreview.src === '#')) {
+      // Ensure preview exists for images even if user skipped viewing
+      await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          imagePreview.src = e.target.result;
+          imagePreview.onload = () => {
+            imagePreview.style.display = 'block';
+            ensureCanvas();
+            clearCanvas();
+            resolve();
+          };
+        };
+        reader.readAsDataURL(file);
+      });
     }
 
     const json = await postImage(API_RUN_MAIN, toSend);
@@ -193,7 +227,7 @@ predictButton.addEventListener('click', async () => {
     setLoading(false);
 
     if (!dets.length) {
-      alert('ไม่พบผลลัพธ์');
+      alert('No results found');
       return;
     }
 
@@ -205,9 +239,12 @@ predictButton.addEventListener('click', async () => {
     };
     imgTmp.src = imagePreview.src;
 
+    // Close modal after starting prediction (optional)
+    closeModalFn();
+
   } catch (err) {
     console.error(err);
     setLoading(false);
-    alert('เกิดข้อผิดพลาดระหว่างการทำนาย');
+    alert('An error occurred during prediction');
   }
 });
