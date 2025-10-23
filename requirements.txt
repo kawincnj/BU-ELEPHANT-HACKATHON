@@ -1,0 +1,9 @@
+# Core deep learning libraries
+torch==2.1.0
+torchvision==0.15.2
+
+# Image processing
+pillow==10.0.0
+
+# Utilities
+numpy>=1.26.0
