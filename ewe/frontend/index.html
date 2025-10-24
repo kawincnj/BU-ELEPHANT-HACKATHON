@@ -90,11 +90,13 @@
     .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:14px; }
 
     /* Center the first heading in the container */
-    .container > h1:first-of-type { text-align: center; }
+    .container > h1:first-of-type { text-align: left; }
 
     /* Center the preview image and overlay together */
     .preview-center { text-align: center; }
     .preview-box { position: relative; display: inline-block; }
+
+    .predict-actions { display:flex; justify-content:right; }
   </style>
 </head>
 <body>
@@ -103,16 +105,13 @@
   </header>
 
   <div class="container">
-    <h1>Please upload your elephant file.</h1>
+    <h1>Please upload your elephant.</h1>
 
     <!-- no more upload -->
     <div class="upload-area field" id="mainUploadArea" style="margin-top:24px;">
-      <p id="uploadTypeText" style="font-weight:bold;">Please select your file</p>
+      <p id="uploadTypeText" style="font-weight:bold;">Select your file</p>
       <input type="file" id="fileUploader" accept="image/*,video/*" />
       <p style="font-size:12px;color:#6b6f6a;">Supports images and videos. (Only 🐘🐘🐘 please)</p>
-      <div class="modal-actions">
-        <button id="predictButton" class="btn success">Predict</button>
-      </div>
     </div>
 
     <hr />
@@ -123,6 +122,11 @@
         <img id="imagePreview" src="#" alt="Image Preview" />
         <!-- canvas overlay is injected here dynamically -->
       </div>
+    </div>
+
+    <!-- Predict button moved below the image -->
+    <div class="predict-actions">
+      <button id="predictButton" class="btn success">Predict</button>
     </div>
 
     <div id="statusRow" style="display:none;margin-top:12px;">
