@@ -26,11 +26,11 @@
     }
     .container {
       width: 100%;
-      max-width: 520px;
+      max-width: 600px;
       margin: auto;
       background: #ffffff; /* light card */
-      padding: 24px;
-      border-radius: 12px;
+      padding: 32px;
+      border-radius: 16px;
       border: 1px solid #e5efe0; /* subtle border on light */
       box-shadow: 0 6px 18px rgba(29,26,27,0.08);
     }
@@ -85,7 +85,7 @@
     .field { margin:10px 0; }
     .field label { display:block; font-weight:600; margin-bottom:6px; color:#1D1A1B }
     .field select, .field input[type="file"] {
-      width:100%; background:#ffffff; color:#1D1A1B; border:1px solid rgba(128,164,237,0.6); border-radius:6px; padding:8px;
+      width:96%; background:#ffffff; color:#1D1A1B; border:1px solid rgba(128,164,237,0.6); border-radius:6px; padding:8px;
     }
     .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:14px; }
 
@@ -105,9 +105,14 @@
   <div class="container">
     <h1>Please upload your elephant file.</h1>
 
-    <div class="selection-area">
-      <!-- Replaced image/video buttons with a single button that opens the modal -->
-      <button id="openModalBtn" class="btn primary">Upload</button>
+    <!-- no more upload -->
+    <div class="upload-area field" id="mainUploadArea" style="margin-top:24px;">
+      <p id="uploadTypeText" style="font-weight:bold;">Please select your file</p>
+      <input type="file" id="fileUploader" accept="image/*,video/*" />
+      <p style="font-size:12px;color:#6b6f6a;">Supports images and videos. (Only 🐘🐘🐘 please)</p>
+      <div class="modal-actions">
+        <button id="predictButton" class="btn success">Predict</button>
+      </div>
     </div>
 
     <hr />
@@ -127,29 +132,6 @@
     <div id="resultsCard" style="display:none;margin-top:14px;text-align:left;">
       <div style="font-weight:600;margin-bottom:6px;">Predictions</div>
       <ol id="resultsList" style="margin:0;padding-left:20px;"></ol>
-    </div>
-
-    <!-- Removed Predict button from container; it's now inside the modal -->
-  </div>
-
-  <!-- Upload & Predict Modal -->
-  <div id="uploadModal" class="modal" aria-hidden="true">
-    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-      <div class="modal-header">
-        <h3 id="modalTitle" style="margin:0;">Upload & Predict</h3>
-        <button id="closeModal" class="modal-close" aria-label="Close">✕</button>
-      </div>
-
-      <!-- Removed file type selection; accept both images and videos -->
-      <div class="upload-area field" id="mainUploadArea">
-        <p id="uploadTypeText" style="font-weight:bold;">Please select your file</p>
-        <input type="file" id="fileUploader" accept="image/*,video/*" />
-        <p style="font-size:12px;color:#888;">Supports images and videos. (Only 🐘🐘🐘 please)</p>
-      </div>
-
-      <div class="modal-actions">
-        <button id="predictButton" class="btn success">Predict</button>
-      </div>
     </div>
   </div>
 

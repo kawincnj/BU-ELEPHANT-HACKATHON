@@ -1,10 +1,6 @@
 const API_RUN_MAIN = "http://localhost:8000/run-main";
 
 // Elements
-const openModalBtn = document.getElementById('openModalBtn');
-const uploadModal = document.getElementById('uploadModal');
-const closeModal = document.getElementById('closeModal');
-
 const mainUploadArea = document.getElementById('mainUploadArea');
 const fileUploader = document.getElementById('fileUploader');
 const uploadTypeText = document.getElementById('uploadTypeText');
@@ -69,21 +65,6 @@ function drawDetections(dets, naturalW, naturalH) {
     overlayCtx.fillText(label, rx1 + 4, ry1 - 4);
   });
 }
-
-// Modal controls
-function openModal() {
-  uploadModal.style.display = 'flex';
-  uploadModal.setAttribute('aria-hidden', 'false');
-}
-function closeModalFn() {
-  uploadModal.style.display = 'none';
-  uploadModal.setAttribute('aria-hidden', 'true');
-}
-openModalBtn?.addEventListener('click', openModal);
-closeModal?.addEventListener('click', closeModalFn);
-uploadModal?.addEventListener('click', (e) => {
-  if (e.target === uploadModal) closeModalFn();
-});
 
 // Handle file selection (image or video)
 fileUploader.addEventListener('change', (event) => {
@@ -238,9 +219,6 @@ predictButton.addEventListener('click', async () => {
       drawDetections(dets, imgTmp.naturalWidth, imgTmp.naturalHeight);
     };
     imgTmp.src = imagePreview.src;
-
-    // Close modal after starting prediction (optional)
-    closeModalFn();
 
   } catch (err) {
     console.error(err);
