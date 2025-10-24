@@ -12,6 +12,57 @@ const statusText = document.getElementById('statusText');
 const resultsCard = document.getElementById('resultsCard');
 const resultsList = document.getElementById('resultsList');
 
+// Emoji toggle -> popup modals
+const toggleElephantBtn = document.getElementById('toggleElephantBtn');
+const elephantModal = document.getElementById('elephantModal');
+const eleModalClose = document.getElementById('eleModalClose');
+const elephantToggleImage = document.getElementById('elephantToggleImage');
+const DEMO_ELE_IMG = 'https://png.pngtree.com/png-vector/20250717/ourlarge/pngtree-realistic-male-african-elephant-staring-at-camera-against-white-background-png-image_16703761.png';
+
+const toggleHorseBtn = document.getElementById('toggleHorseBtn');
+const horseModal = document.getElementById('horseModal');
+const horseModalClose = document.getElementById('horseModalClose');
+const horseToggleImage = document.getElementById('horseToggleImage');
+const DEMO_HORSE_IMG = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQAPCed-LtF456eO3YYex3iy_4aMV5HzCkjvw&s';
+
+function openElephantModal() {
+  elephantToggleImage.src = DEMO_ELE_IMG;
+  elephantModal.style.display = 'flex';
+  elephantModal.setAttribute('aria-hidden', 'false');
+}
+function closeElephantModal() {
+  elephantModal.style.display = 'none';
+  elephantModal.setAttribute('aria-hidden', 'true');
+  elephantToggleImage.src = '';
+}
+
+function openHorseModal() {
+  horseToggleImage.src = DEMO_HORSE_IMG;
+  horseModal.style.display = 'flex';
+  horseModal.setAttribute('aria-hidden', 'false');
+}
+function closeHorseModal() {
+  horseModal.style.display = 'none';
+  horseModal.setAttribute('aria-hidden', 'true');
+  horseToggleImage.src = '';
+}
+
+toggleElephantBtn?.addEventListener('click', () => {
+  const isHidden = elephantModal.style.display === 'none' || elephantModal.style.display === '';
+  if (isHidden) openElephantModal(); else closeElephantModal();
+});
+
+toggleHorseBtn?.addEventListener('click', () => {
+  const isHidden = horseModal.style.display === 'none' || horseModal.style.display === '';
+  if (isHidden) openHorseModal(); else closeHorseModal();
+});
+
+eleModalClose?.addEventListener('click', closeElephantModal);
+horseModalClose?.addEventListener('click', closeHorseModal);
+
+elephantModal?.addEventListener('click', (e) => { if (e.target === elephantModal) closeElephantModal(); });
+horseModal?.addEventListener('click', (e) => { if (e.target === horseModal) closeHorseModal(); });
+
 let overlayCanvas, overlayCtx;
 
 function ensureCanvas() {

@@ -17,76 +17,27 @@
       flex-direction: column;
       min-height: 100vh;
     }
-    header {
-      text-align: center;
-      padding: 20px;
-      color: #1D1A1B; /* Text over gradient */
-      background: linear-gradient(90deg, #80A4ED 0%, #FFA552 100%); /* Accent -> Primary */
-      border-bottom: 1px solid #dfe8d9; /* soft edge on light bg */
-    }
-    .container {
-      width: 100%;
-      max-width: 600px;
-      margin: auto;
-      background: #ffffff; /* light card */
-      padding: 32px;
-      border-radius: 16px;
-      border: 1px solid #e5efe0; /* subtle border on light */
-      box-shadow: 0 6px 18px rgba(29,26,27,0.08);
-    }
+    header { text-align: center; padding: 20px; color: #1D1A1B; background: linear-gradient(90deg, #80A4ED 0%, #FFA552 100%); border-bottom: 1px solid #dfe8d9; }
+    .container { width: 100%; max-width: 600px; margin: auto; background: #ffffff; padding: 32px; border-radius: 16px; border: 1px solid #e5efe0; box-shadow: 0 6px 18px rgba(29,26,27,0.08); }
     .selection-area { display:flex; gap:12px; justify-content:center; margin:42px 0 16px 0; }
     .selection-area button.active { background:#80A4ED; color:#1D1A1B }
 
     /* Preview image */
-    #imagePreview {
-      display:none;
-      max-width:100%;
-      max-height:380px;
-      margin-top:12px;
-      border-radius:8px;
-      border: 1px solid #e5efe0;
-    }
+    #imagePreview { display:none; max-width:100%; max-height:380px; margin-top:12px; border-radius:8px; border: 1px solid #e5efe0; }
 
     #predictButton { margin-top:16px; padding:12px 24px; border-radius:8px; background:#FFA552; color:#1D1A1B; border:none; font-weight:700; cursor:pointer }
 
     hr { border:0; border-top:1px solid #e5efe0; }
 
     /* Buttons */
-    .btn {
-      padding:10px 16px;
-      border-radius:8px;
-      border:1px solid #80A4ED; /* Accent border */
-      cursor:pointer;
-      font-weight:600;
-      background:#ffffff;
-      color:#1D1A1B;
-    }
+    .btn { padding:10px 16px; border-radius:8px; border:1px solid #80A4ED; cursor:pointer; font-weight:600; background:#ffffff; color:#1D1A1B; }
     .btn.primary { background:#80A4ED; color:#1D1A1B; border-color:#80A4ED }
     .btn.success { background:#FFA552; color:#1D1A1B; border-color:#FFA552 }
     .btn:hover { filter: brightness(0.98); }
 
-    /* Make the Open Uploader button larger */
-    #openModalBtn {
-      padding: 16px 32px;
-      font-size: 1.125rem; /* ~18px */
-      border-radius: 12px;
-    }
-
-    /* Modal styles */
-    .modal {
-      display:none; position:fixed; inset:0; background:rgba(29,26,27,0.45); z-index:1000; align-items:center; justify-content:center;
-    }
-    .modal-content {
-      width:90%; max-width:520px; background:#ffffff; color:#1D1A1B; border:1px solid #e5efe0; border-radius:12px; padding:20px; box-shadow:0 10px 30px rgba(29,26,27,0.15);
-    }
-    .modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
-    .modal-close { background:transparent; border:none; font-size:20px; cursor:pointer; line-height:1; color:#1D1A1B }
-
     .field { margin:10px 0; }
     .field label { display:block; font-weight:600; margin-bottom:6px; color:#1D1A1B }
-    .field select, .field input[type="file"] {
-      width:96%; background:#ffffff; color:#1D1A1B; border:1px solid rgba(128,164,237,0.6); border-radius:6px; padding:8px;
-    }
+    .field select, .field input[type="file"] { width:96%; background:#ffffff; color:#1D1A1B; border:1px solid rgba(128,164,237,0.6); border-radius:6px; padding:8px; }
     .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:14px; }
 
     /* Center the first heading in the container */
@@ -97,6 +48,20 @@
     .preview-box { position: relative; display: inline-block; }
 
     .predict-actions { display:flex; justify-content:right; }
+
+    /* Fixed-position emoji toggle buttons */
+    #toggleElephantBtn, #toggleHorseBtn { position: fixed; bottom: 20px; z-index: 1200; font-size: 28px; line-height: 1; width: 56px; height: 56px; display:flex; align-items:center; justify-content:center; background:#ffffff; color:#1D1A1B; border:1px solid #e5efe0; border-radius: 50%; box-shadow: 0 6px 14px rgba(29,26,27,0.15); cursor: pointer; }
+    #toggleElephantBtn { right: 20px; }
+    #toggleHorseBtn { right: 88px; }
+    #toggleElephantBtn:hover, #toggleHorseBtn:hover { filter: brightness(0.98); }
+
+    /* Elephant and Horse popup modal */
+    #elephantModal, #horseModal { display:none; position:fixed; inset:0; background:rgba(29,26,27,0.55); z-index: 1150; align-items:center; justify-content:center; }
+    .ele-modal-content { position: relative; background:#ffffff; border:1px solid #e5efe0; border-radius:12px; padding:10px 10px 12px; box-shadow:0 10px 30px rgba(29,26,27,0.2); max-width: 90vw; }
+    .ele-modal-content img { display:block; max-width: 80vw; max-height: 70vh; border-radius: 8px; margin: 0 auto; }
+    #eleModalClose, #horseModalClose { position:absolute; top:6px; right:6px; background:transparent; border:none; font-size:20px; line-height:1; cursor:pointer; color:#1D1A1B }
+
+    .horse-caption { margin-top: 10px; color:#1D1A1B; font-size: 14px; line-height: 1.4; text-align: left; }
   </style>
 </head>
 <body>
@@ -107,7 +72,7 @@
   <div class="container">
     <h1>Please upload your elephant.</h1>
 
-    <!-- no more upload -->
+    <!-- Upload area -->
     <div class="upload-area field" id="mainUploadArea" style="margin-top:24px;">
       <p id="uploadTypeText" style="font-weight:bold;">Select your file</p>
       <input type="file" id="fileUploader" accept="image/*,video/*" />
@@ -136,6 +101,30 @@
     <div id="resultsCard" style="display:none;margin-top:14px;text-align:left;">
       <div style="font-weight:600;margin-bottom:6px;">Predictions</div>
       <ol id="resultsList" style="margin:0;padding-left:20px;"></ol>
+    </div>
+  </div>
+
+  <button id="toggleElephantBtn" title="Toggle elephant">🐘</button>
+  <button id="toggleHorseBtn" title="Toggle horse">🐴</button>
+
+  <div id="elephantModal" aria-hidden="true">
+    <div class="ele-modal-content" role="dialog" aria-modal="true">
+      <button id="eleModalClose" aria-label="Close">✕</button>
+      <img id="elephantToggleImage" alt="Demo Elephant" />
+    </div>
+  </div>
+
+  <div id="horseModal" aria-hidden="true">
+    <div class="ele-modal-content" role="dialog" aria-modal="true">
+      <button id="horseModalClose" aria-label="Close">✕</button>
+      <img id="horseToggleImage" alt="Horse Image" />
+      <div class="horse-caption">
+        <div><strong>Team :</strong> i like horses</div>
+        <div><strong>Team Members :</strong></div>
+        <div>Nuthnon Kanokkantapong</div>
+        <div>Papawit Saeliw</div>
+        <div>Eamon Matthew Gleason</div>
+      </div>
     </div>
   </div>
 
