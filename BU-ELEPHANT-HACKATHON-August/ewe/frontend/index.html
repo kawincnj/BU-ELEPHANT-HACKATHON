@@ -14,7 +14,7 @@
       --accent: #2ecc71;
       --accent-hover: #27ae60;
       --text: #2c3e50;
-      --text-light: #7f8c8d;
+      --text-light: #000000;
       --bg: #f8f9fa;
       --card: #ffffff;
       --border: #e1e4e8;
@@ -23,7 +23,7 @@
     
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background-image: url('elephant.png');
+      background-image: url('gold_elephant.png');
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
@@ -221,7 +221,7 @@
     }
     
     .btn-secondary {
-      background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+      background: linear-gradient(135deg, #ff2b2b 0%, #ff5858 100%);
       color: white;
     }
     
@@ -266,11 +266,37 @@
       box-shadow: 0 4px 12px var(--shadow);
       transition: all 0.3s ease;
       animation: slideIn 0.5s ease;
+      position: relative;
     }
     
     .result-card:hover {
       transform: translateX(5px);
       box-shadow: 0 6px 20px var(--shadow);
+    }
+    
+    .result-card-delete {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(231, 76, 60, 0.9);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      cursor: pointer;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+      font-weight: bold;
+      z-index: 10;
+    }
+    
+    .result-card-delete:hover {
+      background: rgba(192, 57, 43, 1);
+      transform: scale(1.1);
     }
     
     .result-header {
@@ -341,7 +367,7 @@
     
     .btn-clear-results {
       background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
-      color: white;
+      color: rgb(255, 255, 255);
       padding: 8px 16px;
       border: none;
       border-radius: 8px;
@@ -411,9 +437,9 @@
     <div class="upload-section">
       <h2>📤 Upload File</h2>
       <div class="current-time" id="currentTime"></div>
-      
+
       <div class="upload-area" id="uploadArea">
-        <div class="upload-icon">➕</div>
+        <div class="upload-icon">🐘</div>
         <div class="upload-text">Upload your picture</div>
         <input type="file" id="fileInput" multiple accept="image/*,video/*" />
       </div>
@@ -571,6 +597,15 @@
       }
     });
     
+    // Delete single result
+    function deleteResult(index) {
+      allResults.splice(index, 1);
+      renderResults();
+    }
+    
+    // Make deleteResult available globally
+    window.deleteResult = deleteResult;
+    
     // Update UI
     function updateUI() {
       predictBtn.disabled = uploadedFiles.length === 0;
@@ -694,6 +729,7 @@
           errorCard.className = 'result-card';
           errorCard.style.borderLeftColor = '#e74c3c';
           errorCard.innerHTML = `
+            <button class="result-card-delete" onclick="deleteResult(${index})" title="Delete this result">×</button>
             <div class="result-header">
               <div class="result-title" style="color: #e74c3c;">❌ เกิดข้อผิดพลาด</div>
               <img src="${result.thumbnail}" class="result-image" alt="thumbnail">
@@ -719,6 +755,7 @@
           noDetCard.className = 'result-card';
           noDetCard.style.borderLeftColor = '#f39c12';
           noDetCard.innerHTML = `
+            <button class="result-card-delete" onclick="deleteResult(${index})" title="Delete this result">×</button>
             <div class="result-header">
               <div class="result-title" style="color: #f39c12;">⚠️ No Detections</div>
               <img src="${result.thumbnail}" class="result-image" alt="thumbnail">
@@ -751,6 +788,7 @@
           const confidence = ((det.similarity || det.confidence || 0) * 100).toFixed(3);
           
           card.innerHTML = `
+            <button class="result-card-delete" onclick="deleteResult(${index})" title="Delete this result">×</button>
             <div class="result-header">
               <div class="result-title">🐘 ${identity}</div>
               <img src="${result.thumbnail}" class="result-image" alt="thumbnail">
