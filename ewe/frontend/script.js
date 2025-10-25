@@ -4,7 +4,11 @@ const API_RUN_MAIN = "http://localhost:8000/run-main";
 const mainUploadArea = document.getElementById('mainUploadArea');
 const fileUploader = document.getElementById('fileUploader');
 const uploadTypeText = document.getElementById('uploadTypeText');
-const imagePreview = document.getElementById('imagePreview');
+const imagePreview = document.getElementById('imagePreview'); // no longer shown on page
+const popupImagePreview = document.getElementById('popupImagePreview'); // legacy, no longer used
+const imagePreviewPopup = document.getElementById('imagePreviewPopup');
+const sidePopupImage = document.getElementById('sidePopupImage');
+const sidePreviewClose = document.getElementById('sidePreviewClose');
 const predictButton = document.getElementById('predictButton');
 
 const statusRow = document.getElementById('statusRow');
@@ -65,7 +69,14 @@ horseModal?.addEventListener('click', (e) => { if (e.target === horseModal) clos
 
 let overlayCanvas, overlayCtx;
 
+function getActivePreviewImg() {
+  return sidePopupImage || imagePreview; // draw on the side popup image
+}
+
 function ensureCanvas() {
+  const targetImg = getActivePreviewImg();
+  if (!targetImg) return;
+  const parent = targetImg.parentElement;
   if (!overlayCanvas) {
     overlayCanvas = document.createElement('canvas');
     overlayCanvas.style.position = 'absolute';
@@ -73,11 +84,14 @@ function ensureCanvas() {
     overlayCanvas.style.top = '0';
     overlayCanvas.style.pointerEvents = 'none';
     overlayCanvas.id = 'overlay';
-    imagePreview.parentElement.style.position = 'relative';
-    imagePreview.parentElement.appendChild(overlayCanvas);
+    if (parent) {
+      parent.style.position = 'relative';
+      parent.appendChild(overlayCanvas);
+    }
   }
-  overlayCanvas.width = imagePreview.clientWidth;
-  overlayCanvas.height = imagePreview.clientHeight;
+  // Size canvas to the currently visible image in popup
+  overlayCanvas.width = targetImg.clientWidth || targetImg.naturalWidth || 0;
+  overlayCanvas.height = targetImg.clientHeight || targetImg.naturalHeight || 0;
   overlayCtx = overlayCanvas.getContext('2d');
 }
 
@@ -129,10 +143,13 @@ function pickLargestDetection(dets = []) {
 }
 
 function drawDetections(dets, naturalW, naturalH) {
+  const targetImg = getActivePreviewImg();
+  if (!targetImg) return;
   ensureCanvas();
   clearCanvas();
-  const scaleX = imagePreview.clientWidth / naturalW;
-  const scaleY = imagePreview.clientHeight / naturalH;
+  if (!naturalW || !naturalH) return;
+  const scaleX = (targetImg.clientWidth || naturalW) / naturalW;
+  const scaleY = (targetImg.clientHeight || naturalH) / naturalH;
 
   const d = pickLargestDetection(dets);
   if (!d) return;
@@ -145,12 +162,10 @@ function drawDetections(dets, naturalW, naturalH) {
   const w = rx2 - rx1;
   const h = ry2 - ry1;
 
-  // Box
   overlayCtx.lineWidth = 3;
   overlayCtx.strokeStyle = 'rgba(0, 255, 0, 0.85)';
   overlayCtx.strokeRect(rx1, ry1, w, h);
 
-  // Label
   const label = d.overlay_text || `${d.identity} (${(d.confidence*100).toFixed(1)}%)`;
   overlayCtx.font = '14px Arial';
   const textW = overlayCtx.measureText(label).width + 8;
@@ -161,31 +176,22 @@ function drawDetections(dets, naturalW, naturalH) {
   overlayCtx.fillText(label, rx1 + 4, ry1 - 4);
 }
 
-// Handle file selection (image or video)
+// Handle file selection (images only) — do not preview on page
 fileUploader.addEventListener('change', (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-  const isImage = file.type.startsWith('image/');
-
-  if (isImage) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      imagePreview.src = e.target.result;
-      imagePreview.onload = () => {
-        imagePreview.style.display = 'block';
-        ensureCanvas();
-        clearCanvas();
-      };
-    };
-    reader.readAsDataURL(file);
-  } else {
-    // Hide preview for non-image files (e.g., video)
+  const files = Array.from(event.target.files || []).filter(f => f.type.startsWith('image/'));
+  if (uploadTypeText) {
+    const n = files.length;
+    uploadTypeText.textContent = n ? `${n} image(s) selected` : 'Select your images';
+  }
+  // Hide the in-page preview completely
+  if (imagePreview) {
     imagePreview.src = '#';
     imagePreview.style.display = 'none';
-    clearCanvas();
   }
+  clearCanvas();
 });
 
+// Helper to show/hide loading overlay and lockout UI
 function setLoading(on, msg = 'Predicting...') {
   const overlay = document.getElementById('loadingOverlay');
   const msgEl   = document.getElementById('loadingMessage');
@@ -215,92 +221,6 @@ function setLoading(on, msg = 'Predicting...') {
     clearTimeout(setLoading._fuse);
   }
 }
-
-
-function showPopupResults(payload, startMs, endMs) {
-  const dets = Array.isArray(payload) ? payload : (payload?.detections || []);
-  const processTimeSec =
-    Array.isArray(payload)
-      ? null
-      : (payload.process_time_sec ?? (payload.process_time_ms ? (payload.process_time_ms / 1000) : null));
-
-  const popup = document.getElementById('resultsPopup');
-  const list = document.getElementById('popupResultsList');
-  const closeBtn = document.getElementById('popupCloseBtn');
-
-  list.innerHTML = '';
-
-  const d = pickLargestDetection(dets);
-  if (d) {
-    const conf = Number(d?.confidence ?? 0);
-    const sim  = Number(d?.similarity ?? d?.sim ?? 0);
-    const name = (d?.identity && d.identity !== 'Unknown') ? d.identity : 'Unknown Elephant';
-
-    const li = document.createElement('li');
-    li.innerHTML = `
-      <strong>${name}</strong><br>
-      Confidence: ${(conf * 100).toFixed(1)}%<br>
-      Similarity: ${sim.toFixed(2)}
-    `;
-    list.appendChild(li);
-  }
-
-  // Add timestamps above the processed-in line if available
-  if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
-    const rangeEl = document.createElement('li');
-    rangeEl.innerHTML = `<em>Start: ${formatDateTimeHundredths(startMs)} <br> End: ${formatDateTimeHundredths(endMs)}</em>`;
-    list.appendChild(rangeEl);
-  }
-
-  if (processTimeSec !== null) {
-    const timeEl = document.createElement('li');
-    timeEl.innerHTML = `<em>⏱ Processed in ${processTimeSec.toFixed(2)} s</em>`;
-    timeEl.style.textAlign = 'right';
-    list.appendChild(timeEl);
-  }
-
-  popup.style.display = 'flex';
-  popup.setAttribute('aria-hidden', 'false');
-
-  closeBtn.onclick = () => {
-    popup.style.display = 'none';
-    popup.setAttribute('aria-hidden', 'true');
-  };
-
-  popup.addEventListener('click', e => {
-    if (e.target === popup) {
-      popup.style.display = 'none';
-      popup.setAttribute('aria-hidden', 'true');
-    }
-  });
-}
-
-function showInfo(message, title = 'Heads up') {
-  const overlay = document.getElementById('infoPopup');
-  const t = document.getElementById('infoTitle');
-  const txt = document.getElementById('infoText');
-  const btn = document.getElementById('infoCloseBtn');
-
-  t.textContent = title;
-  txt.textContent = message;
-
-  overlay.style.display = 'flex';
-  overlay.setAttribute('aria-hidden', 'false');
-
-  const close = () => {
-    overlay.style.display = 'none';
-    overlay.setAttribute('aria-hidden', 'true');
-    btn.removeEventListener('click', close);
-    overlay.removeEventListener('click', outside);
-  };
-  const outside = (e) => { if (e.target === overlay) close(); };
-
-  btn.addEventListener('click', close);
-  overlay.addEventListener('click', outside);
-}
-
-
-
 
 async function postImage(url, file) {
   const form = new FormData();
@@ -335,6 +255,16 @@ function extractVideoFrame(file) {
   });
 }
 
+// Read a File as a data URL
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 // --- helper to clear results ---
 function hideList() {
   resultsCard.style.display = 'none';
@@ -351,102 +281,282 @@ document.addEventListener('DOMContentLoaded', () => {
   console.log('[UI] Predict handler attached');
 });
 
+// Global state for batch results
+let batchResults = []; // [{ fileName, previewSrc, detections, tStart, tEnd, process_time_sec, process_time_ms }]
+let overallStartMs = 0;
+let overallEndMs = 0;
+let currentPage = 0; // 0..batchResults.length (last is summary)
+
+function renderPopupPage(pageIndex) {
+  console.log('[Batch] Render page', pageIndex, 'of', batchResults.length, '+ summary');
+  const popupEl = document.getElementById('resultsPopup');
+  const list = document.getElementById('popupResultsList');
+  const pager = document.getElementById('popupPager');
+  list.innerHTML = '';
+  pager.innerHTML = '';
+
+  const totalPages = batchResults.length + 1; // last for summary
+
+  // Prev button
+  const prevBtn = document.createElement('button');
+  prevBtn.textContent = 'Prev';
+  prevBtn.className = 'pager-btn';
+  prevBtn.style.margin = '6px 6px 6px 0';
+  prevBtn.onclick = () => {
+    currentPage = (currentPage - 1 + totalPages) % totalPages;
+    renderPopupPage(currentPage);
+  };
+  pager.appendChild(prevBtn);
+
+  // Build numbered buttons
+  for (let i = 0; i < totalPages; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'pager-btn';
+    btn.textContent = (i < batchResults.length) ? `${i + 1}` : 'Summary';
+    btn.style.margin = '6px 4px';
+    btn.style.padding = '6px 10px';
+    btn.style.borderRadius = '6px';
+    btn.style.border = '1px solid #80A4ED';
+    btn.style.background = (i === pageIndex) ? '#80A4ED' : '#fff';
+    btn.style.color = '#1D1A1B';
+    btn.addEventListener('click', () => {
+      currentPage = i;
+      renderPopupPage(currentPage);
+    });
+    pager.appendChild(btn);
+  }
+
+  // Next button
+  const nextBtn = document.createElement('button');
+  nextBtn.textContent = 'Next';
+  nextBtn.className = 'pager-btn';
+  nextBtn.style.margin = '6px 0 6px 6px';
+  nextBtn.onclick = () => {
+    currentPage = (currentPage + 1) % totalPages;
+    renderPopupPage(currentPage);
+  };
+  pager.appendChild(nextBtn);
+
+  // Page indicator
+  const info = document.createElement('span');
+  info.textContent = ` Page ${pageIndex + 1} / ${totalPages} `;
+  info.style.marginLeft = '8px';
+  info.style.fontSize = '12px';
+  pager.appendChild(info);
+
+  if (pageIndex < batchResults.length) {
+    const item = batchResults[pageIndex];
+    // Per-file details
+    const h = document.createElement('li');
+    h.innerHTML = `<strong>File:</strong> ${item.fileName}`;
+    list.appendChild(h);
+
+    const dets = item.detections || [];
+    const d = pickLargestDetection(dets);
+    if (d) {
+      const conf = Number(d?.confidence ?? 0);
+      const cls  = d?.yolo_label || 'elephant';
+      const name = (d?.identity && d.identity !== 'Unknown') ? d.identity : 'Unknown Elephant';
+
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <strong>${name}</strong><br>
+        Confidence: ${(conf * 100).toFixed(1)}%<br>
+        Class: ${cls}
+      `;
+      list.appendChild(li);
+    } else {
+      const li = document.createElement('li');
+      li.textContent = 'No elephant detected.';
+      list.appendChild(li);
+    }
+
+    // Start–End and processed-in seconds
+    const rangeEl = document.createElement('li');
+    rangeEl.innerHTML = `<em>Start: ${formatDateTimeHundredths(item.tStart)} — End: ${formatDateTimeHundredths(item.tEnd)}</em>`;
+    list.appendChild(rangeEl);
+
+    const procSec = (item.process_time_sec != null)
+      ? Number(item.process_time_sec)
+      : ((item.tEnd - item.tStart) / 1000);
+    const timeEl = document.createElement('li');
+    timeEl.innerHTML = `<em>⏱ Time elapsed: ${procSec.toFixed(2)} s</em>`;
+    timeEl.style.textAlign = 'right';
+    list.appendChild(timeEl);
+
+    // Show one preview image in side popup and draw overlay
+    if (item.previewSrc) {
+      const imgTmp = new Image();
+      imgTmp.onload = () => {
+        openSidePreview(item.previewSrc);
+        requestAnimationFrame(() => {
+          ensureCanvas();
+          drawDetections(item.detections || [], imgTmp.naturalWidth, imgTmp.naturalHeight);
+        });
+      };
+      imgTmp.src = item.previewSrc;
+    } else {
+      closeSidePreview();
+    }
+  } else {
+    // Summary page content (main popup). Hide side preview on summary.
+    const totalFiles = batchResults.length;
+    const startLi = document.createElement('li');
+    startLi.innerHTML = `<strong>Overall Start:</strong> ${formatDateTimeHundredths(overallStartMs)}`;
+    list.appendChild(startLi);
+
+    const endLi = document.createElement('li');
+    endLi.innerHTML = `<strong>Overall End:</strong> ${formatDateTimeHundredths(overallEndMs)}`;
+    list.appendChild(endLi);
+
+    const totalSec = (overallEndMs - overallStartMs) / 1000;
+    const durLi = document.createElement('li');
+    durLi.innerHTML = `<em>⏱ Time elapsed: ${totalSec.toFixed(2)} s for ${totalFiles} image(s)</em>`;
+    durLi.style.textAlign = 'right';
+    list.appendChild(durLi);
+
+    // Grid of elephant pictures that fit on screen
+    const gridWrapper = document.createElement('div');
+    gridWrapper.className = 'summary-grid';
+
+    let count = 0;
+    for (const [idx, it] of batchResults.entries()) {
+      const d = pickLargestDetection(it.detections || []);
+      if (!d) continue; // only images with an elephant
+      count++;
+      const name = d.identity && d.identity !== 'Unknown' ? d.identity : 'Unknown';
+      const conf = Number(d.confidence ?? 0) * 100;
+
+      const itemDiv = document.createElement('div');
+      const thumb = document.createElement('div');
+      thumb.className = 'thumb';
+      const img = document.createElement('img');
+      img.src = it.previewSrc;
+      img.alt = `${it.fileName} → ${name}`;
+      thumb.appendChild(img);
+
+      const cap = document.createElement('div');
+      cap.className = 'caption';
+      cap.innerHTML = `#${idx + 1} ${name} (${conf.toFixed(1)}%)`;
+
+      itemDiv.appendChild(thumb);
+      itemDiv.appendChild(cap);
+      gridWrapper.appendChild(itemDiv);
+    }
+
+    if (!count) {
+      const none = document.createElement('li');
+      none.textContent = 'No elephants predicted in the selected images.';
+      list.appendChild(none);
+    } else {
+      // Insert the grid after the info rows
+      list.appendChild(gridWrapper);
+    }
+
+    // Hide side preview on summary
+    closeSidePreview();
+  }
+
+  // Ensure popup visible
+  popupEl.style.display = 'flex';
+  popupEl.setAttribute('aria-hidden', 'false');
+}
+
+function showBatchResults(results, startMs, endMs) {
+  console.log('[Batch] Results pages:', results.length, '+ 1 summary');
+  batchResults = results;
+  overallStartMs = startMs;
+  overallEndMs = endMs;
+  currentPage = 0;
+
+  const closeBtn = document.getElementById('popupCloseBtn');
+  closeBtn.onclick = () => {
+    const popupEl = document.getElementById('resultsPopup');
+    popupEl.style.display = 'none';
+    popupEl.setAttribute('aria-hidden', 'true');
+  };
+
+  const popupEl = document.getElementById('resultsPopup');
+  popupEl.addEventListener('click', e => {
+    if (e.target === popupEl) {
+      popupEl.style.display = 'none';
+      popupEl.setAttribute('aria-hidden', 'true');
+    }
+  });
+
+  renderPopupPage(currentPage);
+}
+
 // --- main click handler ---
 async function onPredictClick() {
   console.log('[UI] Predict clicked');
   hideList();
   clearCanvas();
 
-  const file = fileUploader.files[0];
-  if (!file) {
-    showInfo('Please select a file before Predicting!', 'No file selected');
+  const allFiles = Array.from(fileUploader.files || []);
+  const files = allFiles.filter(f => f.type.startsWith('image/'));
+  console.log('[Batch] Selected images:', files.length);
+  if (!files.length) {
+    showInfo('Please select image(s) before Predicting!', 'No image selected');
     return;
   }
-
-  const isImage = file.type.startsWith('image/');
-  const isVideo = file.type.startsWith('video/');
-  if (!isImage && !isVideo) {
-    showInfo('File format not supported.');
-    return;
+  if (files.length !== allFiles.length) {
+    showInfo('Only images are supported. Non-image files were ignored.');
   }
 
   try {
     setLoading(true, 'Predicting...');
-    let toSend = file;
 
-    if (isVideo) {
-      setLoading(true, 'Pulling frame from video...');
-      toSend = await extractVideoFrame(file);
-      await new Promise(resolve => {
-        const reader = new FileReader();
-        reader.onload = e => {
-          imagePreview.src = e.target.result;
-          imagePreview.onload = () => {
-            imagePreview.style.display = 'block';
-            ensureCanvas();
-            clearCanvas();
-            resolve();
-          };
-        };
-        reader.readAsDataURL(toSend);
-      });
-      setLoading(true, 'Predicting...');
-    } else if (isImage && (!imagePreview.src || imagePreview.src === '#')) {
-      await new Promise(resolve => {
-        const reader = new FileReader();
-        reader.onload = e => {
-          imagePreview.src = e.target.result;
-          imagePreview.onload = () => {
-            imagePreview.style.display = 'block';
-            ensureCanvas();
-            clearCanvas();
-            resolve();
-          };
-        };
-        reader.readAsDataURL(file);
+    const results = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const previewSrc = await fileToDataURL(file);
+
+      setLoading(true, `Predicting ${i + 1}/${files.length}...`);
+      const tStart = Date.now();
+      const json = await postImage(API_RUN_MAIN, file);
+      const tEnd = Date.now();
+
+      results.push({
+        fileName: file.name,
+        previewSrc,
+        detections: json.detections || [],
+        process_time_sec: json.process_time_sec,
+        process_time_ms: json.process_time_ms,
+        tStart,
+        tEnd,
       });
     }
 
-    const tStart = Date.now();
-    const json = await postImage(API_RUN_MAIN, toSend);
-    const tEnd = Date.now();
+    // Overall times should reflect first and last image
+    const overallStart = results[0]?.tStart;
+    const overallEnd = results[results.length - 1]?.tEnd;
     setLoading(false);
 
-    const dets = json.detections || [];
-    const noResultsMessage = document.getElementById('noResultsMessage');
-    const noResultsPopup = document.getElementById('noResultsPopup');
-    const noResultsCloseBtn = document.getElementById('noResultsCloseBtn');
-
-    if (!dets.length) {
-      setLoading(false);
+    // If none of the results have detections
+    const anyDetections = results.some(r => (r.detections || []).length);
+    if (!anyDetections) {
+      const noResultsPopup = document.getElementById('noResultsPopup');
+      const noResultsCloseBtn = document.getElementById('noResultsCloseBtn');
 
       noResultsPopup.style.display = 'flex';
       noResultsPopup.setAttribute('aria-hidden', 'false');
-
       noResultsCloseBtn.onclick = () => {
         noResultsPopup.style.display = 'none';
         noResultsPopup.setAttribute('aria-hidden', 'true');
       };
-
       noResultsPopup.addEventListener('click', (e) => {
         if (e.target === noResultsPopup) {
           noResultsPopup.style.display = 'none';
           noResultsPopup.setAttribute('aria-hidden', 'true');
         }
       });
-
       return;
     }
 
-    // Only show largest detection in popup, with timestamps
-    showPopupResults(json, tStart, tEnd);
-
-    // Drawing: only draw the largest detection
-    const imgTmp = new Image();
-    imgTmp.onload = () => {
-      drawDetections(dets, imgTmp.naturalWidth, imgTmp.naturalHeight);
-    };
-    imgTmp.src = imagePreview.src;
+    // Show paginated popup and sync overlay with selected page
+    showBatchResults(results, overallStart, overallEnd);
 
   } catch (err) {
     console.error(err);
@@ -454,5 +564,24 @@ async function onPredictClick() {
   } finally {
     setLoading(false);
   }
+}
+
+function showInfo(text, title = 'Heads up') {
+  const popup = document.getElementById('infoPopup');
+  const titleEl = document.getElementById('infoTitle');
+  const textEl = document.getElementById('infoText');
+  const closeBtn = document.getElementById('infoCloseBtn');
+  if (!popup) return alert(text || '');
+  if (titleEl) titleEl.textContent = title;
+  if (textEl) textEl.textContent = text;
+  popup.style.display = 'flex';
+  popup.setAttribute('aria-hidden', 'false');
+  const onClose = () => {
+    popup.style.display = 'none';
+    popup.setAttribute('aria-hidden', 'true');
+    if (closeBtn) closeBtn.removeEventListener('click', onClose);
+  };
+  if (closeBtn) closeBtn.addEventListener('click', onClose);
+  popup.addEventListener('click', (e) => { if (e.target === popup) onClose(); });
 }
 

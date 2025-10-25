@@ -40,17 +40,26 @@ async def run_main(
     id_sim_thres: float = 0.985
 ):
     """Accept an image, convert to OpenCV BGR, call main.predict_on_frame, return detections."""
-    if not file.content_type or "image" not in file.content_type:
-        raise HTTPException(415, "Upload an image (jpeg/png).")
+    print(f"[DEBUG] Received file: {file.filename}, content_type: {file.content_type}")
+    
+    # More lenient content type check - accept common image types and missing content types
+    if file.content_type and "image" not in file.content_type:
+        print(f"[ERROR] Invalid content type: {file.content_type}")
+        raise HTTPException(415, f"Upload an image (jpeg/png). Received: {file.content_type}")
 
     data = await file.read()
     if not data:
+        print("[ERROR] Empty file received")
         raise HTTPException(400, "Empty file.")
+
+    print(f"[DEBUG] File size: {len(data)} bytes")
 
     # Bytes -> RGB -> BGR
     try:
         img = Image.open(BytesIO(data)).convert("RGB")
+        print(f"[DEBUG] Image opened successfully: {img.size}")
     except Exception as e:
+        print(f"[ERROR] Failed to open image: {e}")
         raise HTTPException(400, f"Invalid image: {e}")
 
     rgb = np.array(img)
@@ -62,7 +71,11 @@ async def run_main(
             conf_thres=conf_thres,
             id_sim_thres=id_sim_thres
         )
+        print(f"[DEBUG] Prediction successful: {len(result.get('detections', []))} detections")
     except Exception as e:
-        raise HTTPException(400, f"Inference failed: {e}")
+        print(f"[ERROR] Inference failed: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Inference failed: {e}")
 
     return JSONResponse(result)
