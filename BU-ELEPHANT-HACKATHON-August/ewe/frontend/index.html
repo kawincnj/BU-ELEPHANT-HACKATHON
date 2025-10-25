@@ -31,7 +31,9 @@
   <div class="container">
     <h1>Upload your Elephant file</h1>
     <p>Please select the file type first, then upload your image or video file.</p>
-
+    
+    <div id="currentDateTime"></div>
+    
     <div class="selection-area">
       <button id="selectImage">Upload Image 🖼️</button>
       <button id="selectVideo">Upload Video 🎥</button>
@@ -47,8 +49,7 @@
 
     <div style="position:relative;">
       <img id="imagePreview" src="#" alt="Uploaded Image Preview" />
-      <!-- canvas overlay is injected here dynamically -->
-    </div>
+      </div>
 
     <div id="statusRow" style="display:none;margin-top:12px;">
       <span id="statusText">Processing...</span>
