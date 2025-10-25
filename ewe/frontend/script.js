@@ -12,23 +12,24 @@ const statusRow = document.getElementById("statusRow");
 const statusText = document.getElementById("statusText");
 const resultsCard = document.getElementById("resultsCard");
 const resultsList = document.getElementById("resultsList");
+const currentDateTimeElement = document.getElementById("currentDateTime");
 
 let currentFileType = null;
 let overlayCanvas, overlayCtx;
 
-// --- เพิ่มตัวแปรและฟังก์ชันจับเวลา ---
+// --- Variables and Time Tracking ---
 let timerStart = null;
 let timerInterval = null;
 let lastElapsed = null;
+let startTimeDisplay = null;
+let endTimeDisplay = null;
 
 function startTimer() {
-  // เริ่มนับเวลา (ความละเอียด ms)
   if (timerInterval) {
     clearInterval(timerInterval);
     timerInterval = null;
   }
   timerStart = performance.now();
-  // อัพเดต lastElapsed ระหว่างทำงาน (แต่ไม่แสดงทุกครั้ง เพื่อไม่รบกวน UI)
   timerInterval = setInterval(() => {
     lastElapsed = (performance.now() - timerStart) / 1000;
   }, 100);
@@ -44,8 +45,32 @@ function stopTimer() {
   timerStart = null;
   return lastElapsed;
 }
-// --- จบการเพิ่มตัวจับเวลา ---
+// Helper function to format Date object into d/m/y HH:MM:SS.SSS
+function formatDateTime(date) {
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
 
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+  const milliseconds = String(date.getMilliseconds()).padStart(3, "0");
+
+  return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}.${milliseconds}`;
+}
+
+function updateDateTime() {
+  const now = new Date();
+  if (currentDateTimeElement) {
+    currentDateTimeElement.textContent = `Current Time: ${formatDateTime(now)}`;
+  }
+}
+
+// Start updating time every second
+updateDateTime();
+setInterval(updateDateTime, 1000);
+
+// --- Canvas and Drawing Functions ---
 function ensureCanvas() {
   if (!overlayCanvas) {
     overlayCanvas = document.createElement("canvas");
@@ -87,9 +112,9 @@ function drawDetections(dets, naturalW, naturalH) {
     overlayCtx.strokeStyle = "rgba(0, 255, 0, 0.85)";
     overlayCtx.strokeRect(rx1, ry1, w, h);
 
-    // Label
+    // Label (3 decimal places)
     const label =
-      d.overlay_text || `${d.identity} (${(d.confidence * 100).toFixed(1)}%)`;
+      d.overlay_text || `${d.identity} (${(d.confidence * 100).toFixed(3)}%)`;
     overlayCtx.font = "14px Arial";
     const textW = overlayCtx.measureText(label).width + 8;
     const textH = 18;
@@ -100,11 +125,13 @@ function drawDetections(dets, naturalW, naturalH) {
   });
 }
 
+// --- File Selection and UI Management ---
 function setFileType(type) {
   currentFileType = type;
   mainUploadArea.style.display = "block";
   imagePreview.style.display = "none";
   fileUploader.value = "";
+  hideList();
 
   if (type === "image") {
     selectImageButton.classList.add("active");
@@ -140,6 +167,7 @@ fileUploader.addEventListener("change", (event) => {
     imagePreview.style.display = "none";
     clearCanvas();
   }
+  hideList();
 });
 
 function setLoading(on, msg = "กำลังประมวลผล…") {
@@ -147,49 +175,90 @@ function setLoading(on, msg = "กำลังประมวลผล…") {
   statusText.textContent = msg;
   predictButton.disabled = on;
   if (!on) {
-    // หยุดตัวจับเวลาเมื่อลบสถานะ loading (จะเก็บค่าไว้ที่ lastElapsed)
     stopTimer();
   }
 }
 
+// --- Result Display Logic (Show the requested format) ---
 function showList(dets) {
   resultsList.innerHTML = "";
-  dets.forEach((d) => {
-    // สร้างกล่องผลลัพธ์แต่ละชิ้น
-    const li = document.createElement("li");
-    li.className = "result-item";
 
+  // Create a helper function for a detail row
+  const createDetailRow = (label, value, className) => {
+    const row = document.createElement("div");
+    row.className = `detail-row ${className || ""}`;
+    row.innerHTML = `<span class="detail-label">${label}</span> <span class="detail-value">${value}</span>`;
+    return row;
+  };
+
+  // 1. Loop through detections and show detailed results in the requested format
+  dets.forEach((d, index) => {
+    // Get the specific name (e.g., "Elephant: IKO")
+    const identityName = d.identity || "Unknown Elephant";
+
+    // Predict Class value is hardcoded to "elephant"
+    const predictedClassValue = "elephant";
+
+    const li = document.createElement("li");
+    li.className = "result-item detailed-result";
+
+    // Title: Detection Number and Identity
     const title = document.createElement("div");
     title.className = "ri-title";
-    title.textContent = d.overlay_text || d.identity || "Unknown";
-
-    const fields = document.createElement("div");
-    fields.className = "ri-fields";
-
-    const conf = document.createElement("div");
-    conf.className = "ri-field";
-    conf.innerHTML = `<span class="ri-label">ความถูกต้อง:</span> <span class="ri-val">${(
-      d.confidence * 100
-    ).toFixed(1)}%</span>`;
-
-    const sim = document.createElement("div");
-    sim.className = "ri-field";
-    sim.innerHTML = `<span class="ri-label">Sim:</span> <span class="ri-val">${
-      d.similarity !== undefined ? d.similarity.toFixed(2) : "N/A"
-    }</span>`;
-
-    const time = document.createElement("div");
-    time.className = "ri-time";
-    time.innerHTML = `<span class="ri-label">เวลา:</span> <span class="ri-val">${
-      lastElapsed ? lastElapsed.toFixed(2) : "0.00"
-    } วินาที</span>`;
-
-    fields.appendChild(conf);
-    fields.appendChild(sim);
-    fields.appendChild(time);
-
+    title.textContent = `Detection ${index + 1}: ${identityName}`;
     li.appendChild(title);
-    li.appendChild(fields);
+
+    // Main detail table container
+    const fieldsContainer = document.createElement("div");
+    fieldsContainer.className = "ri-details-table";
+
+    // Row 1: Test Class / Identity
+    fieldsContainer.appendChild(
+      createDetailRow("Predicted Class:", identityName)
+    );
+
+    // Row 2: Predict Class (HARDCODED TO 'elephant')
+    // fieldsContainer.appendChild(createDetailRow('Predict Class:', predictedClassValue));
+
+    // COMMENTED OUT: Row 3: Confidence (3 decimal places) - Removed as requested
+    /*
+    fieldsContainer.appendChild(createDetailRow('Confidence:', `${(d.confidence*100).toFixed(3)}%`, 'confidence-row'));
+    */
+
+    // Row 3 (was 4): Sim Confidence (Similarity) - Now displayed as a percentage (x100)
+    if (d.similarity !== undefined) {
+      fieldsContainer.appendChild(
+        createDetailRow(
+          "Confidence:",
+          `${(d.similarity * 100).toFixed(3)}%`,
+          "similarity-row"
+        )
+      );
+    }
+
+    // --- Time details are added only to the FIRST result item for clarity ---
+    if (index === 0) {
+      // Row 4 (was 5): Start Time (with milliseconds)
+      fieldsContainer.appendChild(
+        createDetailRow("Start Time:", startTimeDisplay, "time-row")
+      );
+
+      // Row 5 (was 6): End Time (with milliseconds)
+      fieldsContainer.appendChild(
+        createDetailRow("End Time:", endTimeDisplay, "time-row")
+      );
+
+      // Row 6 (was 7): Time Elapsed (3 decimal places)
+      fieldsContainer.appendChild(
+        createDetailRow(
+          "Time using:",
+          `${lastElapsed ? lastElapsed.toFixed(3) : "0.000"} second`,
+          "elapsed-time-row"
+        )
+      );
+    }
+
+    li.appendChild(fieldsContainer);
     resultsList.appendChild(li);
   });
 
@@ -199,11 +268,11 @@ function showList(dets) {
 function hideList() {
   resultsCard.style.display = "none";
   resultsList.innerHTML = "";
-  // ลบ element แสดงเวลาเมื่อซ่อนผลลัพธ์
-  const timeEl = document.getElementById("elapsedTime");
-  if (timeEl) timeEl.remove();
+  startTimeDisplay = null;
+  endTimeDisplay = null;
 }
 
+// --- API and Video Handling ---
 async function postImage(url, file) {
   const form = new FormData();
   form.append("file", file);
@@ -241,6 +310,7 @@ function extractVideoFrame(file) {
   });
 }
 
+// --- Predict Button Handler ---
 predictButton.addEventListener("click", async () => {
   hideList();
   clearCanvas();
@@ -256,7 +326,8 @@ predictButton.addEventListener("click", async () => {
   }
 
   try {
-    // เริ่มจับเวลาเมื่อผู้ใช้กด Predict
+    // CAPTURE START TIME (now with milliseconds)
+    startTimeDisplay = formatDateTime(new Date());
     startTimer();
     setLoading(true, "กำลังประมวลผล…");
 
@@ -268,6 +339,10 @@ predictButton.addEventListener("click", async () => {
     }
 
     const json = await postImage(API_RUN_MAIN, toSend);
+
+    // CAPTURE END TIME (now with milliseconds)
+    endTimeDisplay = formatDateTime(new Date());
+
     const dets = json.detections || [];
     setLoading(false);
 
@@ -285,6 +360,8 @@ predictButton.addEventListener("click", async () => {
     imgTmp.src = imagePreview.src;
   } catch (err) {
     console.error(err);
+    // Ensure end time is captured even on error
+    endTimeDisplay = formatDateTime(new Date());
     setLoading(false);
     alert("เกิดข้อผิดพลาดระหว่างการทำนาย");
   }

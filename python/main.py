@@ -1,165 +1,218 @@
-import torch
 import cv2
+import torch
+import onnxruntime as ort 
+import numpy as np 
 from PIL import Image
 import torchvision.transforms as transforms
 import torch.nn.functional as F
 from ultralytics import YOLO
 import warnings
+import time 
+import os
 
 warnings.filterwarnings('ignore')
 
-# ------------------------------- python.exe -m pip install --upgrade pip
-# Set device
+# -------------------------------
+# Set device (Used only for loading reference embeddings and YOLO)
 # -------------------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"PyTorch Device set to: {device}")
 
 # -------------------------------
-# TNI Model Definition
+# 🌟 CONFIGURATION 🌟
+# (Configuration remains the same)
 # -------------------------------
-class TNIModel(torch.nn.Module):
-    def __init__(self, embedding_dim=128):
-        super(TNIModel, self).__init__()
-        resnet = torch.hub.load('pytorch/vision:v0.15.2', 'resnet50', weights='IMAGENET1K_V1')
-        self.backbone = torch.nn.Sequential(*list(resnet.children())[:-1])
-        self.embedding = torch.nn.Linear(resnet.fc.in_features, embedding_dim)
-
-    def forward_once(self, x):
-        x = self.backbone(x)
-        x = x.view(x.size(0), -1)
-        x = self.embedding(x)
-        x = F.normalize(x, p=2, dim=1)
-        return x
+INPUT_IMAGE_PATH = r"C:\Users\HP\Downloads\img_ Rat_sa_mee_back_4.png"
+YOLO_MODEL_PATH = r"models\yolov8n.pt"
+ONNX_MODEL_PATH = r"models\tni_elephant_model.onnx" 
+REFERENCE_EMBEDDINGS_PATH = r"D:\CODING\BU-ELEPHANT-HACKATHON\models\reference_embeddings_best.pt"
+CONFIDENCE_THRESHOLD = 0.7
+IDENTIFICATION_THRESHOLD = 0.98
 
 # -------------------------------
-# Load TNI Model
+# 1. Load YOLO Model
 # -------------------------------
-tni_model = TNIModel(embedding_dim=128).to(device)
-tni_model.load_state_dict(torch.load(r"D:\CODING\BU-ELEPHANT-HACKATHON\model\modeltni_elephant_model.pth", 
-                                      map_location=device, 
-                                      weights_only=True))
-tni_model.eval()
+yolo_model = YOLO(YOLO_MODEL_PATH)
 
 # -------------------------------
-# Load YOLO Model
+# 2. Initialize ONNX Runtime Session
 # -------------------------------
-yolo_model = YOLO(r"D:\CODING\BU-ELEPHANT-HACKATHON\model\elephant_obj_detect.pt")
+ort_session = None
+ONNX_INPUT_NAME = None
+ONNX_OUTPUT_NAME = None
+
+try:
+    # Use CUDAExecutionProvider for reliable GPU acceleration
+    providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+    
+    ort_session = ort.InferenceSession(ONNX_MODEL_PATH, providers=providers)
+    
+    # Check which provider is actually used
+    used_provider = ort_session.get_providers()[0]
+    if 'CUDAExecutionProvider' in used_provider:
+        print(f"✅ ONNX Runtime using: CUDAExecutionProvider (Fast fallback)")
+    else:
+        print(f"⚠️ ONNX Runtime using: {used_provider} (CPU fallback)")
+        
+    ONNX_INPUT_NAME = ort_session.get_inputs()[0].name
+    ONNX_OUTPUT_NAME = ort_session.get_outputs()[0].name
+    print(f"✅ ONNX Model loaded successfully.")
+
+except Exception as e:
+    print(f"❌ Error loading ONNX model: {e}")
+    # Fallback to pure CPU if all GPU/TRT methods fail
+    ort_session = ort.InferenceSession(ONNX_MODEL_PATH, providers=['CPUExecutionProvider'])
+    ONNX_INPUT_NAME = ort_session.get_inputs()[0].name
+    ONNX_OUTPUT_NAME = ort_session.get_outputs()[0].name
 
 # -------------------------------
-# Image transform for identification
+# 3. Image transform for identification
+# (Transforms remain the same)
 # -------------------------------
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    transforms.Normalize(mean=[0.485, 0.456, 0.456], std=[0.229, 0.224, 0.225])
 ])
 
 # -------------------------------
-# Load reference embeddings
+# 4. Load reference embeddings
+# (Loading and pre-stacking logic remains the same)
 # -------------------------------
-reference_embeddings = torch.load(r"D:\CODING\BU-ELEPHANT-HACKATHON\model\reference_embeddings.pt", 
-                                   map_location=device, 
-                                   weights_only=True)
+reference_embeddings = None
+try:
+    reference_embeddings = torch.load(REFERENCE_EMBEDDINGS_PATH, map_location=device) 
+    print(f"✅ Reference embeddings loaded. Total classes: {len(reference_embeddings)}")
+except Exception as e:
+    print(f"❌ Error loading reference embeddings: {e}")
+    exit()
+
+ref_names = list(reference_embeddings.keys())
+ref_emb_tensor = torch.stack([reference_embeddings[name].squeeze() for name in ref_names]).to(device) 
+ref_emb_tensor = F.normalize(ref_emb_tensor, p=2, dim=1) 
+print(f"✅ Reference gallery ready on device: {ref_emb_tensor.device}")
 
 # -------------------------------
-# Function to identify elephant from cropped image
+# Function to identify elephant using ONNX Runtime (Vectorized)
+# (This function is unchanged, it's already optimized)
 # -------------------------------
-def identify_elephant(cropped_frame, reference_embeddings, model, device):
-    """Identify elephant from a cropped frame (numpy array)"""
-    # Convert BGR to RGB
+def identify_elephant_onnx(cropped_frame, ref_emb_tensor, ref_names, ort_session, input_name, output_name, device):
+    """Identify elephant from a cropped frame (numpy array) using ONNX with batched similarity."""
+    
+    # 1. Preprocessing
     img_rgb = cv2.cvtColor(cropped_frame, cv2.COLOR_BGR2RGB)
     img_pil = Image.fromarray(img_rgb)
+    img_tensor = transform(img_pil).unsqueeze(0) 
+    input_data = img_tensor.cpu().numpy().astype(np.float32)
     
-    # Transform and prepare for model
-    img_tensor = transform(img_pil).unsqueeze(0).to(device)
+    # 2. ONNX Inference
+    ort_inputs = {input_name: input_data}
+    ort_outputs = ort_session.run([output_name], ort_inputs)
+    query_emb = torch.from_numpy(ort_outputs[0]).to(device) # (1, D)
+
+    # 3. Batched similarity search (GPU/Vectorized)
+    query_emb = F.normalize(query_emb, p=2, dim=1) # Normalize the query
     
-    with torch.no_grad():
-        emb = model.forward_once(img_tensor)
+    # We transpose ref_emb_tensor from (N, D) to (D, N)
+    sims = torch.matmul(query_emb, ref_emb_tensor.T).squeeze() # -> (N,)
     
-    max_sim = -1
-    identity = None
-    for name, ref_emb in reference_embeddings.items():
-        ref_emb = ref_emb.to(device)
-        # Ensure ref_emb has the same shape as emb
-        if ref_emb.dim() == 1:
-            ref_emb = ref_emb.unsqueeze(0)
+    # Get max similarity and its index
+    max_sim, idx_tensor = sims.max(dim=0)
+    best_match_index = idx_tensor.item() 
+    
+    identity = ref_names[best_match_index]
+    
+    return identity, max_sim.item()
+
+# -------------------------------
+# Main Single Image Processing (TIMERS MOVED)
+# -------------------------------
+def process_single_image():
+    
+    # 🌟 NON-AI TASK 1: Load image from disk
+    frame = cv2.imread(INPUT_IMAGE_PATH)
+    if frame is None:
+        print(f"❌ Error: Could not load image at {INPUT_IMAGE_PATH}")
+        return
+    
+    # This will store the combined time of all AI calls
+    total_ai_time = 0.0
+
+    # 🌟 AI TASK 1: YOLO Detection 🌟
+    # -------------------------------
+    if device.type == 'cuda':
+        torch.cuda.synchronize() # Wait for GPU to be ready
+    start_time_yolo = time.perf_counter()
+    
+    results = yolo_model(frame)[0] 
+    
+    if device.type == 'cuda':
+        torch.cuda.synchronize() # Wait for GPU to finish
+    end_time_yolo = time.perf_counter()
+    total_ai_time += (end_time_yolo - start_time_yolo)
+    # -------------------------------
+
+    processed_frame = frame.copy()
         
-        # Compute cosine similarity
-        sim = F.cosine_similarity(emb, ref_emb, dim=1)
-        if sim.item() > max_sim:
-            max_sim = sim.item()
-            identity = name
-    
-    return identity, max_sim
-
-# -------------------------------
-# Main Video Processing Loop
-# -------------------------------
-cap = cv2.VideoCapture(r"D:\CODING\BU-ELEPHANT-HACKATHON\Videos\รัศมี.MP4")
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
-CONFIDENCE_THRESHOLD = 0.7
-IDENTIFICATION_THRESHOLD = 0.98  # Minimum similarity for identification
-
-print("🎥 Starting video processing...")
-print("Press 'q' to quit")
-
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        print("❌ End of video or cannot read frame")
-        break
-
-    # Run YOLO detection
-    results = yolo_model(frame)[0]
-
     for box in results.boxes:
         conf = float(box.conf)
-
         if conf < CONFIDENCE_THRESHOLD:
             continue
 
         x1, y1, x2, y2 = map(int, box.xyxy[0])
-        cls_id = int(box.cls[0])
-        label = yolo_model.names[cls_id]
-        
-        # Crop the detected elephant
         cropped_elephant = frame[y1:y2, x1:x2]
-        
-        # Skip if crop is too small
         if cropped_elephant.shape[0] < 50 or cropped_elephant.shape[1] < 50:
             continue
         
-        # Identify the elephant
-        identity, similarity = identify_elephant(cropped_elephant, reference_embeddings, 
-                                                 tni_model, device)
+        # 🌟 AI TASK 2: TNI Identification 🌟
+        # -------------------------------
+        if device.type == 'cuda':
+            torch.cuda.synchronize()
+        start_time_tni = time.perf_counter()
         
-        # Choose color based on identification confidence
-        if similarity > IDENTIFICATION_THRESHOLD:
-            color = (0, 255, 0)  # Green for confident identification
-            text = f"{identity} ({similarity:.2f})"
-        else:
-            color = (0, 165, 255)  # Orange for uncertain
-            text = f"Unknown Elephant ({conf:.2f})"
+        identity, similarity = identify_elephant_onnx(
+            cropped_elephant,
+            ref_emb_tensor,
+            ref_names,
+            ort_session,
+            ONNX_INPUT_NAME,
+            ONNX_OUTPUT_NAME,
+            device
+        )
         
-        # Draw bounding box
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        if device.type == 'cuda':
+            torch.cuda.synchronize()
+        end_time_tni = time.perf_counter()
+        total_ai_time += (end_time_tni - start_time_tni)
+        # -------------------------------
         
-        # Draw label background
+        # 🌟 NON-AI TASK 2: Drawing results
+        color = (0, 255, 0) if similarity > IDENTIFICATION_THRESHOLD else (0, 165, 255)
+        text = f"{identity} ({similarity:.2f})" if similarity > IDENTIFICATION_THRESHOLD else f"Unknown Elephant ({conf:.2f})"
+        
+        cv2.rectangle(processed_frame, (x1, y1), (x2, y2), color, 2)
         (text_width, text_height), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-        cv2.rectangle(frame, (x1, y1 - text_height - 10), (x1 + text_width, y1), color, -1)
-        
-        # Draw text
-        cv2.putText(frame, text, (x1, y1 - 5),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+        cv2.rectangle(processed_frame, (x1, y1 - text_height - 10), (x1 + text_width, y1), color, -1)
+        cv2.putText(processed_frame, text, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+    
+    
+    # 🌟 NON-AI TASK 3: Display image
+    total_time_ms = total_ai_time * 1000
+    
+    cv2.imshow("Elephant Detection & Identification (ONNX/TRT)", processed_frame)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    
+    print("\n" + "="*70)
+    print("✅ Image Processing Completed")
+    print(f"Input Image: {os.path.basename(INPUT_IMAGE_PATH)}")
+    # 🌟 UPDATED PRINT STATEMENT 🌟
+    print(f"Time Usage: {total_time_ms:.2f} ms (Total AI Prediction Time Only)")
+    print("="*70)
 
-    # Display the frame
-    cv2.imshow("Elephant Detection & Identification", frame)
-
-    # Quit on 'q' press
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-cap.release()
-cv2.destroyAllWindows()
-print("✅ Video processing completed")
+if __name__ == "__main__":
+    print("--- RUN 1: WARM-UP ---")
+    process_single_image()
+    
+    print("\n--- RUN 2: REAL SPEED ---")
+    process_single_image()

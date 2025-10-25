@@ -1,9 +1,26 @@
-# Core deep learning libraries
-torch==2.1.0
-torchvision==0.15.2
+# --- FastAPI Server ---
+# For the web API framework
+fastapi
+# For running the server (like 'python -m uvicorn...')
+uvicorn[standard]
+# For handling file uploads in FastAPI
+python-multipart
 
-# Image processing
-pillow==10.0.0
+# --- AI & Deep Learning ---
+# For loading and running the YOLOv8 model (even .onnx files)
+ultralytics
+# For running ONNX models on the GPU (This runs BOTH models)
+# DO NOT install 'onnxruntime', just this one.
+onnxruntime-gpu 
+# Core PyTorch library (needed for similarity search and transforms)
+torch
+# For image transforms
+torchvision
 
-# Utilities
-numpy>=1.26.0
+# --- Image & Data Processing ---
+# For OpenCV functions (better for servers than the full opencv-python)
+opencv-python-headless
+# For PIL (Image) functions
+Pillow
+# For all numerical operations
+numpy
