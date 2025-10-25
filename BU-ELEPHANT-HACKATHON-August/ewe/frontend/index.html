@@ -39,6 +39,12 @@
       color: white;
       margin-bottom: 30px;
       animation: fadeInDown 0.6s ease;
+      background: linear-gradient(135deg, rgba(255, 140, 0, 0.6) 0%, rgba(255, 100, 50, 0.6) 100%);
+      backdrop-filter: blur(3px);
+      padding: 30px 20px;
+      border-radius: 20px;
+      box-shadow: 0 10px 40px rgba(255, 140, 0, 0.4);
+      border: 2px solid rgba(255, 255, 255, 0.3);
     }
     
     .header h1 {
@@ -63,7 +69,8 @@
     }
     
     .upload-section, .results-section {
-      background: var(--card);
+      background: rgba(255, 255, 255, 0.3);
+      backdrop-filter: blur(3px);
       border-radius: 20px;
       padding: 30px;
       box-shadow: 0 10px 40px var(--shadow);
@@ -93,14 +100,14 @@
       text-align: center;
       cursor: pointer;
       transition: all 0.3s ease;
-      background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+      background: rgba(253, 251, 251, 0.3);
       position: relative;
       overflow: hidden;
     }
     
     .upload-area:hover {
       border-color: var(--primary);
-      background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+      background: rgba(255, 255, 255, 0.3);
       transform: translateY(-2px);
     }
     
@@ -147,7 +154,7 @@
       overflow: hidden;
       box-shadow: 0 4px 12px var(--shadow);
       transition: transform 0.3s ease;
-      background: var(--bg);
+      background: rgba(248, 249, 250, 0.5);
     }
     
     .preview-item:hover {
@@ -250,7 +257,8 @@
     }
     
     .result-card {
-      background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+      background: rgba(253, 251, 251, 0.3);
+      backdrop-filter: blur(3px);
       border-radius: 15px;
       padding: 20px;
       margin-bottom: 15px;
@@ -328,7 +336,7 @@
     .empty-icon {
       font-size: 4rem;
       margin-bottom: 20px;
-      opacity: 0.3;
+      opacity: 1;
     }
     
     .btn-clear-results {
@@ -395,20 +403,18 @@
 </head>
 <body>
   <div class="header">
-    <h1>🐘 ELEPHANT IDENTIFICATION</h1>
-    <p class="subtitle">ระบบระบุตัวตนช้างด้วย AI</p>
+    <h1>ELEPHANT IDENTIFICATION 🐘</h1>
   </div>
 
   <div class="main-container">
     <!-- Upload Section -->
     <div class="upload-section">
-      <h2>📤 อัพโหลดไฟล์</h2>
+      <h2>📤 Upload File</h2>
       <div class="current-time" id="currentTime"></div>
       
       <div class="upload-area" id="uploadArea">
         <div class="upload-icon">➕</div>
-        <div class="upload-text">คลิกหรือลากไฟล์มาที่นี่</div>
-        <div class="upload-hint">รองรับ: รูปภาพ (JPG, PNG) หลายไฟล์หรือทั้งโฟลเดอร์</div>
+        <div class="upload-text">Upload your picture</div>
         <input type="file" id="fileInput" multiple accept="image/*,video/*" />
       </div>
       
@@ -416,10 +422,10 @@
       
       <div class="action-buttons">
         <button class="btn btn-primary" id="predictBtn" disabled>
-          🔍 วิเคราะห์ทั้งหมด
+          🔍 Predict
         </button>
         <button class="btn btn-secondary" id="clearBtn">
-          🗑️ ล้างทั้งหมด
+          🗑️ Clear All
         </button>
       </div>
     </div>
@@ -427,16 +433,15 @@
     <!-- Results Section -->
     <div class="results-section">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h2 style="margin: 0;">📊 ผลการวิเคราะห์</h2>
+        <h2 style="margin: 0;">📊 Prediction</h2>
         <button class="btn-clear-results" id="clearResultsBtn" style="display: none;">
-          🗑️ ล้างผลลัพธ์
+          🗑️ Clear Results
         </button>
       </div>
       <div id="resultsContainer">
         <div class="empty-state">
           <div class="empty-icon">📋</div>
-          <p>ยังไม่มีผลการวิเคราะห์</p>
-          <p style="font-size: 0.9rem; margin-top: 10px;">อัพโหลดรูปภาพและกดปุ่มวิเคราะห์</p>
+          <p>Empty Prediction</p>
         </div>
       </div>
     </div>
@@ -471,7 +476,7 @@
         second: '2-digit',
         hour12: false
       });
-      currentTimeEl.textContent = `เวลาปัจจุบัน: ${formatted}`;
+      currentTimeEl.textContent = `Current Time: ${formatted}`;
     }
     updateTime();
     setInterval(updateTime, 1000);
@@ -554,14 +559,13 @@
     
     // Clear results
     clearResultsBtn.addEventListener('click', () => {
-      if (confirm('คุณต้องการล้างผลการวิเคราะห์ทั้งหมดหรือไม่?')) {
+      if (confirm('Clear All Predictions?')) {
         allResults = [];
         clearResultsBtn.style.display = 'none';
         resultsContainer.innerHTML = `
           <div class="empty-state">
             <div class="empty-icon">📋</div>
-            <p>ยังไม่มีผลการวิเคราะห์</p>
-            <p style="font-size: 0.9rem; margin-top: 10px;">อัพโหลดรูปภาพและกดปุ่มวิเคราะห์</p>
+            <p>Empty Prediction</p>
           </div>
         `;
       }
@@ -581,7 +585,7 @@
       let processedCount = 0;
       
       // Show initial loading
-      showLoading(`กำลังวิเคราะห์... (0/${totalFiles})`);
+      showLoading(`Predicting... (0/${totalFiles})`);
       
       for (const file of uploadedFiles) {
         try {
@@ -598,7 +602,7 @@
           
           // Update loading message
           processedCount++;
-          showLoading(`กำลังวิเคราะห์... (${processedCount}/${totalFiles})`);
+          showLoading(`Predicting... (${processedCount}/${totalFiles})`);
           
           const formData = new FormData();
           formData.append('file', fileToSend);
@@ -655,7 +659,7 @@
     });
     
     // Show loading
-    function showLoading(message = 'กำลังวิเคราะห์...') {
+    function showLoading(message = 'Predicting...') {
       resultsContainer.innerHTML = `
         <div class="loading">
           <div class="spinner"></div>
@@ -670,7 +674,7 @@
         resultsContainer.innerHTML = `
           <div class="empty-state">
             <div class="empty-icon">📋</div>
-            <p>ยังไม่มีผลการวิเคราะห์</p>
+            <p>Empty Prediction</p>
           </div>
         `;
         clearResultsBtn.style.display = 'none';
@@ -696,12 +700,12 @@
             </div>
             <div class="result-details">
               <div class="detail-row">
-                <span class="detail-label">ไฟล์:</span>
+                <span class="detail-label">File Name:</span>
                 <span class="detail-value">${result.filename}</span>
               </div>
               <div class="detail-row">
-                <span class="detail-label">สถานะ:</span>
-                <span class="detail-value" style="color: #e74c3c;">ไม่สามารถวิเคราะห์ได้</span>
+                <span class="detail-label">Status:</span>
+                <span class="detail-value" style="color: #e74c3c;">Unable to Analyze</span>
               </div>
             </div>
           `;
@@ -716,21 +720,21 @@
           noDetCard.style.borderLeftColor = '#f39c12';
           noDetCard.innerHTML = `
             <div class="result-header">
-              <div class="result-title" style="color: #f39c12;">⚠️ ไม่พบการตรวจจับ</div>
+              <div class="result-title" style="color: #f39c12;">⚠️ No Detections</div>
               <img src="${result.thumbnail}" class="result-image" alt="thumbnail">
             </div>
             <div class="result-details">
               <div class="detail-row">
-                <span class="detail-label">ไฟล์:</span>
+                <span class="detail-label">File Name:</span>
                 <span class="detail-value">${result.filename}</span>
               </div>
               <div class="detail-row">
-                <span class="detail-label">ผลลัพธ์:</span>
-                <span class="detail-value">ไม่พบช้างในรูปภาพ</span>
+                <span class="detail-label">Result:</span>
+                <span class="detail-value">No elephant found in the image</span>
               </div>
               <div class="detail-row">
-                <span class="detail-label">ใช้เวลา:</span>
-                <span class="detail-value">${result.elapsed} วินาที</span>
+                <span class="detail-label">Time Taken:</span>
+                <span class="detail-value">${result.elapsed} seconds</span>
               </div>
             </div>
           `;
@@ -753,24 +757,24 @@
             </div>
             <div class="result-details">
               <div class="detail-row">
-                <span class="detail-label">ไฟล์:</span>
+                <span class="detail-label">File Name:</span>
                 <span class="detail-value">${result.filename}</span>
               </div>
               <div class="detail-row">
-                <span class="detail-label">ความมั่นใจ:</span>
+                <span class="detail-label">Confidence:</span>
                 <span class="confidence-badge">${confidence}%</span>
               </div>
               <div class="detail-row">
-                <span class="detail-label">เวลาเริ่ม:</span>
+                <span class="detail-label">Start Time:</span>
                 <span class="detail-value">${result.startTime}</span>
               </div>
               <div class="detail-row">
-                <span class="detail-label">เวลาสิ้นสุด:</span>
+                <span class="detail-label">End Time:</span>
                 <span class="detail-value">${result.endTime}</span>
               </div>
               <div class="detail-row">
-                <span class="detail-label">ใช้เวลา:</span>
-                <span class="detail-value">${result.elapsed} วินาที</span>
+                <span class="detail-label">Time Taken:</span>
+                <span class="detail-value">${result.elapsed} seconds</span>
               </div>
             </div>
           `;
