@@ -79,3 +79,7 @@ async def run_main(
         raise HTTPException(500, f"Inference failed: {e}")
 
     return JSONResponse(result)
+# ============================================================
+# Batch inference endpoint (handles multiple uploads at once)
+# ============================================================
+

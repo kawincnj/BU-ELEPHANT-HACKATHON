@@ -486,7 +486,42 @@ input[type="file"]{
 
 @keyframes popupIn{ from{transform:scale(.95);opacity:0} to{transform:scale(1);opacity:1} }
 
+/* Add vertical gap between pager buttons and Exit button */
+/* Pager row under the results list */
+#popupPager,
+.popup-pager {
+  margin-bottom: 24px;   /* adjust to taste: 24–32px */
+}
+/* Centered Exit button */
+.popup-exit-btn {
+  background: linear-gradient(135deg, #ff8a3d, #ffb64d);
+  color: #fff;
+  border: none;
+  padding: 10px 40px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s ease, transform 0.2s ease;
+  margin-top: 8px;        /* ← add this line */
+}
 
+/* Overrides: remove blur from all overlays/popups */
+.results-popup,
+.no-results-popup,
+.modal-overlay,
+.loading-overlay {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
 
-
+/* Remove darkening overlay backgrounds */
+.results-popup,
+.no-results-popup,
+.modal-overlay,
+.loading-overlay,
+#elephantModal,
+#horseModal {
+  background: transparent !important;
+}
 

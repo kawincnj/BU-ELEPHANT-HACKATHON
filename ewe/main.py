@@ -7,6 +7,8 @@ from PIL import Image
 from ultralytics import YOLO
 import torchvision.transforms as transforms
 import time
+import numpy as np
+import onnxruntime as ort
 
 warnings.filterwarnings('ignore')
 
@@ -17,49 +19,32 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 # -------------------------------
-# TNI Model Definition
-# -------------------------------
-class TNIModel(torch.nn.Module):
-    def __init__(self, embedding_dim=128):
-        super(TNIModel, self).__init__()
-        # NOTE: torch.hub will fetch weights if not cached. Requires internet on first run.
-        resnet = torch.hub.load('pytorch/vision:v0.15.2', 'resnet50', weights='IMAGENET1K_V1')
-        self.backbone = torch.nn.Sequential(*list(resnet.children())[:-1])
-        self.embedding = torch.nn.Linear(resnet.fc.in_features, embedding_dim)
-
-    def forward_once(self, x):
-        x = self.backbone(x)
-        x = x.view(x.size(0), -1)
-        x = self.embedding(x)
-        x = F.normalize(x, p=2, dim=1)
-        return x
-
-
-# -------------------------------
 # Paths (relative to this file)
 # -------------------------------
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(ROOT_DIR, "model")
-TNI_WEIGHTS_PATH = os.path.join(MODEL_DIR, "modeltni_elephant_model.pth")
-YOLO_WEIGHTS_PATH = os.path.join(MODEL_DIR, "elephant_obj_detect.pt")
+ONNX_TNI_PATH = os.path.join(MODEL_DIR, "tni_model.onnx")
+YOLO_WEIGHTS_PATH = os.path.join(MODEL_DIR, "yolo11n.pt")
 REF_EMB_PATH = os.path.join(MODEL_DIR, "reference_embeddings.pt")
 
 # -------------------------------
-# Load TNI Model
+# Load TNI Model (ONNX)
 # -------------------------------
-tni_model = TNIModel(embedding_dim=128).to(device)
-# Some PyTorch versions support weights_only=True; fallback if not available
-try:
-    state = torch.load(TNI_WEIGHTS_PATH, map_location=device, weights_only=True)
-except TypeError:
-    state = torch.load(TNI_WEIGHTS_PATH, map_location=device)
-tni_model.load_state_dict(state)
-tni_model.eval()
+print("📦 Loading TNI model (ONNX)...")
+
+tni_session = ort.InferenceSession(
+    ONNX_TNI_PATH,
+    providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
+)
+tni_input_name = tni_session.get_inputs()[0].name
+tni_output_name = tni_session.get_outputs()[0].name
+print(f"✅ TNI model loaded: input='{tni_input_name}', output='{tni_output_name}'")
 
 # -------------------------------
 # Load YOLO Model
 # -------------------------------
-yolo_model = YOLO("yolov8l.pt")
+yolo_model = YOLO(YOLO_WEIGHTS_PATH)
+
 def get_elephant_class_id(model):
     names = getattr(model, "names", None)
     if isinstance(names, dict):  # Ultralytics commonly exposes a dict {id: name}
@@ -76,7 +61,8 @@ def get_elephant_class_id(model):
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                         std=[0.229, 0.224, 0.225])
 ])
 
 # -------------------------------
@@ -91,14 +77,16 @@ except TypeError:
 # -------------------------------
 # Function to identify elephant from cropped image (BGR ndarray)
 # -------------------------------
-def identify_elephant(cropped_frame, reference_embeddings, model, device):
+def identify_elephant(cropped_frame, reference_embeddings, tni_session, tni_input_name, tni_output_name, device):
     """Identify elephant from a cropped frame (numpy BGR array). Returns (identity, similarity)."""
     img_rgb = cv2.cvtColor(cropped_frame, cv2.COLOR_BGR2RGB)
     img_pil = Image.fromarray(img_rgb)
     img_tensor = transform(img_pil).unsqueeze(0).to(device)
 
-    with torch.no_grad():
-        emb = model.forward_once(img_tensor)
+    # ONNX inference
+    onnx_input = img_tensor.cpu().numpy()
+    emb = tni_session.run([tni_output_name], {tni_input_name: onnx_input})[0]
+    emb = torch.tensor(emb, device=device)
 
     max_sim = -1.0
     identity = None
@@ -115,18 +103,22 @@ def identify_elephant(cropped_frame, reference_embeddings, model, device):
     return identity, max_sim
 
 
-# ============================================================
-# Web helper (single-image inference) — used by FastAPI server
-# ============================================================
-def _identify_from_ndarray_bgr(crop_bgr, model, refs, device, transform):
-    """Internal helper: identify from a BGR crop using the same TNI pipeline."""
+# -------------------------------
+# Helper for single-frame inference (used by web API)
+# -------------------------------
+def _identify_from_ndarray_bgr(crop_bgr, refs, tni_session, tni_input_name, tni_output_name, device, transform):
+    """Internal helper: identify from a BGR crop using the ONNX TNI pipeline."""
     if crop_bgr is None or crop_bgr.size == 0:
         return None, -1.0
     crop_rgb = crop_bgr[:, :, ::-1]
     pil_img = Image.fromarray(crop_rgb)
     x = transform(pil_img).unsqueeze(0).to(device)
-    with torch.no_grad():
-        emb = model.forward_once(x)
+
+    # ONNX inference
+    onnx_input = x.cpu().numpy()
+    emb = tni_session.run([tni_output_name], {tni_input_name: onnx_input})[0]
+    emb = torch.tensor(emb, device=device)
+
     best_name, best_sim = None, -1.0
     for name, ref_emb in refs.items():
         ref = ref_emb.to(device)
@@ -138,12 +130,13 @@ def _identify_from_ndarray_bgr(crop_bgr, model, refs, device, transform):
     return best_name, best_sim
 
 
+# ============================================================
+# Main inference function for a single frame
+# ============================================================
 def predict_on_frame(frame_bgr,
                      conf_thres: float = 0.90,
                      id_sim_thres: float = 0.98):
     start = time.perf_counter()
-
-    import numpy as np
     eid = get_elephant_class_id(yolo_model)
 
     # Run YOLO with class + confidence constraints
@@ -154,27 +147,22 @@ def predict_on_frame(frame_bgr,
         verbose=False
     )[0]
 
-    # Pick only the largest elephant detection
-    largest = None  # (area, (x1,y1,x2,y2), conf)
+    outs = []
     for box in results.boxes:
         conf = float(box.conf.item() if hasattr(box.conf, "item") else box.conf)
         if conf < conf_thres:
             continue
-        x1, y1, x2, y2 = map(int, box.xyxy[0])
-        w, h = max(0, x2 - x1), max(0, y2 - y1)
-        if w < 20 or h < 20:
-            continue
-        area = w * h
-        if largest is None or area > largest[0]:
-            largest = (area, (x1, y1, x2, y2), conf)
 
-    outs = []
-    if largest is not None:
-        _, (x1, y1, x2, y2), conf = largest
+        x1, y1, x2, y2 = map(int, box.xyxy[0])
         crop = frame_bgr[y1:y2, x1:x2]
-        name, sim = _identify_from_ndarray_bgr(crop, tni_model, reference_embeddings, device, transform)
+        if crop.size == 0 or crop.shape[0] < 20 or crop.shape[1] < 20:
+            continue
+
+        name, sim = _identify_from_ndarray_bgr(crop, reference_embeddings, tni_session,
+                                               tni_input_name, tni_output_name, device, transform)
         final_name = name if (sim is not None and sim >= id_sim_thres) else "Unknown"
-        text = f"Elephant: {final_name} ({conf*100:.1f}%) | Sim: {sim:.2f}"
+        text = f"Elephant: {final_name} ({conf*100:.1f}%) | Sim: {sim:.3f}"
+
         outs.append({
             "bbox": [x1, y1, x2, y2],
             "yolo_label": "elephant",
@@ -191,22 +179,19 @@ def predict_on_frame(frame_bgr,
         "process_time_ms": round(elapsed * 1000, 2),
     }
 
+
 # ============================================================
-# Desktop video loop — only runs when executing this file directly
+# Desktop video loop
 # ============================================================
 if __name__ == "__main__":
-    # -------------------------------
-    # Main Video Processing Loop
-    # -------------------------------
-    # Change VIDEO_PATH to your file if needed:
-    VIDEO_PATH = r"D:\CODING\BU-ELEPHANT-HACKATHON\Videos\รัศมี.MP4"  # or set to another path
+    VIDEO_PATH = r"D:\CODING\BU-ELEPHANT-HACKATHON\Videos\รัศมี.MP4"
 
     cap = cv2.VideoCapture(VIDEO_PATH)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-    CONFIDENCE_THRESHOLD = 0.9
-    IDENTIFICATION_THRESHOLD = 0.98  # Minimum similarity for identification
+    CONFIDENCE_THRESHOLD = 0.95
+    IDENTIFICATION_THRESHOLD = 0.98
 
     print("🎥 Starting video processing...")
     print("Press 'q' to quit")
@@ -217,52 +202,44 @@ if __name__ == "__main__":
             print("❌ End of video or cannot read frame")
             break
 
-        # Only consider elephants and pick the largest detection
-        eid = get_elephant_class_id(yolo_model)
-        results = yolo_model.predict(
-            frame,
-            conf=CONFIDENCE_THRESHOLD,
-            classes=[eid],
-            verbose=False
-        )[0]
+        results = yolo_model(frame)[0]
 
-        largest = None  # (area, (x1,y1,x2,y2), conf)
         for box in results.boxes:
-            conf = float(box.conf.item() if hasattr(box.conf, "item") else box.conf)
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            w, h = max(0, x2 - x1), max(0, y2 - y1)
-            if w < 50 or h < 50:
+            conf = float(box.conf)
+            if conf < CONFIDENCE_THRESHOLD:
                 continue
-            area = w * h
-            if largest is None or area > largest[0]:
-                largest = (area, (x1, y1, x2, y2), conf)
 
-        if largest is not None:
-            _, (x1, y1, x2, y2), conf = largest
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            cls_id = int(box.cls[0])
+            label = yolo_model.names[cls_id] if hasattr(yolo_model, "names") else str(cls_id)
+
             cropped_elephant = frame[y1:y2, x1:x2]
+            if cropped_elephant.shape[0] < 50 or cropped_elephant.shape[1] < 50:
+                continue
 
             identity, similarity = identify_elephant(
-                cropped_elephant, reference_embeddings, tni_model, device
+                cropped_elephant, reference_embeddings, tni_session,
+                tni_input_name, tni_output_name, device
             )
 
-            # Only show the single largest detection if it meets identification threshold
-            if similarity > IDENTIFICATION_THRESHOLD:
-                color = (0, 255, 0)  # Green for confident identification
-                text = f"{identity} ({similarity:.2f})"
+            if similarity <= IDENTIFICATION_THRESHOLD:
+                continue
 
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            color = (0, 255, 0)
+            text = f"{identity} ({similarity:.2f})"
 
-                (text_width, text_height), _ = cv2.getTextSize(
-                    text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
-                )
-                cv2.rectangle(frame, (x1, y1 - text_height - 10), (x1 + text_width, y1), color, -1)
-                cv2.putText(frame, text, (x1, y1 - 5),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            (text_width, text_height), _ = cv2.getTextSize(
+                text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
+            )
+            cv2.rectangle(frame, (x1, y1 - text_height - 10), (x1 + text_width, y1), color, -1)
+            cv2.putText(frame, text, (x1, y1 - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
 
-        cv2.imshow("Elephant Detection & Identification", frame)
+        cv2.imshow("Elephant Detection & Identification (ONNX)", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
     cap.release()
     cv2.destroyAllWindows()
-    print("✅ Video processing completed")
+    print("✅ Video processing completed (ONNX mode)")

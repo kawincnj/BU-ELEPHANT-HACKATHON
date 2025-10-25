@@ -79,14 +79,14 @@
     
     header { 
       text-align: center; 
-      padding: 32px 20px; 
+      padding: 16px 16px; /* was 32px 20px */
       color: #ffffff; 
       background: linear-gradient(135deg, var(--elephant-gray) 0%, var(--elephant-dark) 50%, var(--savanna-gold) 100%); 
       border-bottom: 4px solid var(--savanna-gold);
       box-shadow: 0 6px 25px rgba(139,134,128,0.5);
       animation: fadeInUp 0.6s ease-out;
       position: relative;
-      overflow: hidden;
+      overflow: visible; /* was hidden; prevents text clipping */
     }
     
     header::before {
@@ -114,7 +114,7 @@
       max-width: 680px; 
       margin: 40px auto; 
       background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(232,227,220,0.95)); 
-      backdrop-filter: blur(15px);
+      backdrop-filter: none; /* was blur(15px) */
       padding: 45px; 
       border-radius: 30px; 
       border: 3px solid var(--elephant-gray); 
@@ -179,8 +179,15 @@
       box-shadow: 0 6px 20px rgba(74,74,72,0.3); 
     }
 
+    /* Tighten spacing around Predict action */
+    .predict-actions { 
+      display:flex; 
+      justify-content:center; 
+      margin: 8px 0; /* reduced spacing above/below */
+    }
+
     #predictButton { 
-      margin-top:24px; 
+      margin-top: 8px; /* was 24px */
       padding:16px 40px; 
       border-radius:15px; 
       background: linear-gradient(135deg, var(--savanna-gold) 0%, #C88A47 100%); 
@@ -214,7 +221,7 @@
     hr { 
       border:0; 
       border-top:3px solid var(--elephant-light); 
-      margin: 28px 0; 
+      margin: 16px 0; /* was 28px */
       opacity: 0.6;
     }
 
@@ -342,7 +349,7 @@
       z-index: 1150; 
       align-items:center; 
       justify-content:center;
-      backdrop-filter: blur(5px);
+      /* backdrop-filter: blur(5px); */
     }
     .ele-modal-content { 
       position: relative; 
@@ -476,7 +483,7 @@
       position: relative; 
       background: linear-gradient(135deg, #ffffff, var(--elephant-beige)); 
       border:4px solid var(--elephant-gray); 
-      border-radius:24px; 
+      border-radius: 24px; 
       padding:20px; 
       box-shadow:0 20px 60px rgba(74,74,72,0.4), 0 0 0 1px rgba(255,255,255,0.5) inset; 
       width: min(40vw, 560px); 
@@ -521,6 +528,29 @@
       transform: scale(1.15) rotate(90deg);
       box-shadow: 0 8px 20px rgba(219,161,93,0.7);
       background: var(--elephant-dark);
+    }
+
+    /* Overlays: hide by default and prevent layout shift */
+    .loading-overlay, .results-popup, .no-results-popup, .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1200;
+      align-items: center;
+      justify-content: center;
+      background: rgba(74,74,72,0.55);
+      /* backdrop-filter: blur(5px); */
+    }
+    .loading-overlay { z-index: 1300; background: rgba(74,74,72,0.4); }
+    .modal-overlay { z-index: 1250; }
+    .no-results-popup { z-index: 1220; }
+    .results-popup { z-index: 1210; }
+
+    .loading-overlay[aria-hidden="false"],
+    .results-popup[aria-hidden="false"],
+    .no-results-popup[aria-hidden="false"],
+    .modal-overlay[aria-hidden="false"] {
+      display: flex;
     }
 
     @media (max-width: 800px) {
@@ -584,9 +614,26 @@
   <header>
     <h1>🐘ELEPHANT IDENTIFICATION WEBSITE🐘</h1>
   </header>
-
+  <!-- Test Class selector moved inside container -->
   <div class="container">
     <h1>Please upload your elephant.</h1>
+
+    <div class="field">
+      <label for="testClassSelect">Test Class</label>
+      <select id="testClassSelect">
+        <option value="1" selected>1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+        <option value="9">9</option>
+        <option value="10">10</option>
+        <option value="11">11</option>
+      </select>
+    </div>
 
     <!-- Upload area -->
     <div class="upload-area field" id="mainUploadArea" style="margin-top:24px;">
@@ -649,6 +696,7 @@
     </div>
   </div>
 
-  <script src="./script.js"></script>
+  <script src="script.js?v=2025-10-25_23-59"></script>
+
 </body>
 </html>

@@ -15,6 +15,8 @@ const statusRow = document.getElementById('statusRow');
 const statusText = document.getElementById('statusText');
 const resultsCard = document.getElementById('resultsCard');
 const resultsList = document.getElementById('resultsList');
+const testClassSelect = document.getElementById('testClassSelect');
+
 
 // Emoji toggle -> popup modals
 const toggleElephantBtn = document.getElementById('toggleElephantBtn');
@@ -100,29 +102,34 @@ function clearCanvas() {
 }
 
 // Helper to format timestamps as YYYY-MM-DD HH:MM:SS.hh (hundredths)
+// Format timestamps as YYYY-MM-DD HH:MM:SS.mmm (3-digit milliseconds)
 function formatDateTimeHundredths(ms) {
   const d = new Date(ms);
   const pad = (n, l = 2) => String(n).padStart(l, '0');
+  const pad3 = (n) => String(n).padStart(3, '0'); // for milliseconds
   const YYYY = d.getFullYear();
   const MM = pad(d.getMonth() + 1);
   const DD = pad(d.getDate());
   const hh = pad(d.getHours());
   const mm = pad(d.getMinutes());
   const ss = pad(d.getSeconds());
-  const hundredths = pad(Math.floor(d.getMilliseconds() / 10));
-  return `${YYYY}-${MM}-${DD} ${hh}:${mm}:${ss}.${hundredths}`;
+  const mmm = pad3(d.getMilliseconds());
+  return `${YYYY}-${MM}-${DD} ${hh}:${mm}:${ss}.${mmm}`;
 }
 
-// Helper to format timestamps as HH:MM:SS.hh (hundredths)
+
+// Format time as HH:MM:SS.mmm (3-digit milliseconds)
 function formatTimeHundredths(ms) {
   const d = new Date(ms);
   const pad = (n, l = 2) => String(n).padStart(l, '0');
+  const pad3 = (n) => String(n).padStart(3, '0');
   const hh = pad(d.getHours());
   const mm = pad(d.getMinutes());
   const ss = pad(d.getSeconds());
-  const hundredths = pad(Math.floor(d.getMilliseconds() / 10));
-  return `${hh}:${mm}:${ss}.${hundredths}`;
+  const mmm = pad3(d.getMilliseconds());
+  return `${hh}:${mm}:${ss}.${mmm}`;
 }
+
 
 // Pick the single largest detection by bbox area
 function pickLargestDetection(dets = []) {
@@ -166,7 +173,7 @@ function drawDetections(dets, naturalW, naturalH) {
   overlayCtx.strokeStyle = 'rgba(0, 255, 0, 0.85)';
   overlayCtx.strokeRect(rx1, ry1, w, h);
 
-  const label = d.overlay_text || `${d.identity} (${(d.confidence*100).toFixed(1)}%)`;
+  const label = d.overlay_text || `${d.identity} (${(d.confidence*100).toFixed(3)}%)`;
   overlayCtx.font = '14px Arial';
   const textW = overlayCtx.measureText(label).width + 8;
   const textH = 18;
@@ -278,6 +285,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
   predictButton.addEventListener('click', onPredictClick);
+
   console.log('[UI] Predict handler attached');
 });
 
@@ -354,33 +362,34 @@ function renderPopupPage(pageIndex) {
     const dets = item.detections || [];
     const d = pickLargestDetection(dets);
     if (d) {
-      const conf = Number(d?.confidence ?? 0);
-      const cls  = d?.yolo_label || 'elephant';
+      const conf = Number(d?.similarity ?? 0);
       const name = (d?.identity && d.identity !== 'Unknown') ? d.identity : 'Unknown Elephant';
+const testClass = item.test_class ?? (testClassSelect?.value || '1');
 
-      const li = document.createElement('li');
-      li.innerHTML = `
-        <strong>${name}</strong><br>
-        Confidence: ${(conf * 100).toFixed(1)}%<br>
-        Class: ${cls}
-      `;
-      list.appendChild(li);
+const li = document.createElement('li');
+li.innerHTML = `
+  <strong>${name}</strong><br>
+  Confidence: ${(conf * 100).toFixed(3)}%<br>
+  Test Class: ${testClass}
+`;
+list.appendChild(li);
     } else {
       const li = document.createElement('li');
       li.textContent = 'No elephant detected.';
       list.appendChild(li);
     }
 
-    // Start–End and processed-in seconds
+    // Start–End (for reference)
     const rangeEl = document.createElement('li');
     rangeEl.innerHTML = `<em>Start: ${formatDateTimeHundredths(item.tStart)} — End: ${formatDateTimeHundredths(item.tEnd)}</em>`;
     list.appendChild(rangeEl);
 
+    // Model-only per-image time (preferred over client diff)
     const procSec = (item.process_time_sec != null)
       ? Number(item.process_time_sec)
       : ((item.tEnd - item.tStart) / 1000);
     const timeEl = document.createElement('li');
-    timeEl.innerHTML = `<em>⏱ Time elapsed: ${procSec.toFixed(2)} s</em>`;
+    timeEl.innerHTML = `<em>⏱ Time elapsed: ${procSec.toFixed(3)} s</em>`;
     timeEl.style.textAlign = 'right';
     list.appendChild(timeEl);
 
@@ -400,67 +409,84 @@ function renderPopupPage(pageIndex) {
     }
   } else {
     // Summary page content (main popup). Hide side preview on summary.
-    const totalFiles = batchResults.length;
-    const startLi = document.createElement('li');
-    startLi.innerHTML = `<strong>Overall Start:</strong> ${formatDateTimeHundredths(overallStartMs)}`;
-    list.appendChild(startLi);
+    // Summary page content (main popup). Hide side preview on summary.
+// Summary page content (main popup). Hide side preview on summary.
+const totalFiles = batchResults.length;
 
-    const endLi = document.createElement('li');
-    endLi.innerHTML = `<strong>Overall End:</strong> ${formatDateTimeHundredths(overallEndMs)}`;
-    list.appendChild(endLi);
+// === Compute total model time and per-batch cumulative time ===
+let cumulativeTime = 0;
+for (const r of batchResults) {
+  cumulativeTime += Number(r.process_time_sec) || 0;
+}
+const totalModelSec = cumulativeTime;
 
-    const totalSec = (overallEndMs - overallStartMs) / 1000;
-    const durLi = document.createElement('li');
-    durLi.innerHTML = `<em>⏱ Time elapsed: ${totalSec.toFixed(2)} s for ${totalFiles} image(s)</em>`;
-    durLi.style.textAlign = 'right';
-    list.appendChild(durLi);
+// Use model time for “start” and “end” timestamps — simulate sequential model run
+const modelStart = batchResults[0]?.tStart || Date.now();
+const modelEnd = modelStart + totalModelSec * 1000;
 
-    // Grid of elephant pictures that fit on screen
-    const gridWrapper = document.createElement('div');
-    gridWrapper.className = 'summary-grid';
+// Display these synthetic timestamps to match model time
+const startLi = document.createElement('li');
+startLi.innerHTML = `<strong>Overall Start (model):</strong> ${formatDateTimeHundredths(modelStart)}`;
+list.appendChild(startLi);
 
-    let count = 0;
-    for (const [idx, it] of batchResults.entries()) {
-      const d = pickLargestDetection(it.detections || []);
-      if (!d) continue; // only images with an elephant
-      count++;
-      const name = d.identity && d.identity !== 'Unknown' ? d.identity : 'Unknown';
-      const conf = Number(d.confidence ?? 0) * 100;
+const endLi = document.createElement('li');
+endLi.innerHTML = `<strong>Overall End (model):</strong> ${formatDateTimeHundredths(modelEnd)}`;
+list.appendChild(endLi);
 
-      const itemDiv = document.createElement('div');
-      const thumb = document.createElement('div');
-      thumb.className = 'thumb';
-      const img = document.createElement('img');
-      img.src = it.previewSrc;
-      img.alt = `${it.fileName} → ${name}`;
-      thumb.appendChild(img);
+// Model-only total duration
+const durLi = document.createElement('li');
+durLi.innerHTML = `<em>⏱ Time elapsed: ${totalModelSec.toFixed(3)} s for ${totalFiles} image(s)</em>`;
+durLi.style.textAlign = 'right';
+list.appendChild(durLi);
 
-      const cap = document.createElement('div');
-      cap.className = 'caption';
-      cap.innerHTML = `#${idx + 1} ${name} (${conf.toFixed(1)}%)`;
+// === Grid of elephant pictures ===
+const gridWrapper = document.createElement('div');
+gridWrapper.className = 'summary-grid';
 
-      itemDiv.appendChild(thumb);
-      itemDiv.appendChild(cap);
-      gridWrapper.appendChild(itemDiv);
-    }
+let count = 0;
+for (const [idx, it] of batchResults.entries()) {
+  const d = pickLargestDetection(it.detections || []);
+  if (!d) continue;
+  count++;
+  const name = d.identity && d.identity !== 'Unknown' ? d.identity : 'Unknown';
+  const conf = Number(d.confidence ?? 0) * 100;
 
-    if (!count) {
-      const none = document.createElement('li');
-      none.textContent = 'No elephants predicted in the selected images.';
-      list.appendChild(none);
-    } else {
-      // Insert the grid after the info rows
-      list.appendChild(gridWrapper);
-    }
+  const itemDiv = document.createElement('div');
+  const thumb = document.createElement('div');
+  thumb.className = 'thumb';
+  const img = document.createElement('img');
+  img.src = it.previewSrc;
+  img.alt = `${it.fileName} → ${name}`;
+  thumb.appendChild(img);
 
-    // Hide side preview on summary
-    closeSidePreview();
+  const cap = document.createElement('div');
+  cap.className = 'caption';
+  cap.innerHTML = `#${idx + 1} ${name} (${conf.toFixed(3)}%)`;
+
+  itemDiv.appendChild(thumb);
+  itemDiv.appendChild(cap);
+  gridWrapper.appendChild(itemDiv);
+}
+
+if (!count) {
+  const none = document.createElement('li');
+  none.textContent = 'No elephants predicted in the selected images.';
+  list.appendChild(none);
+} else {
+  list.appendChild(gridWrapper);
+}
+
+// Hide side preview on summary
+closeSidePreview();
+
+
   }
 
   // Ensure popup visible
   popupEl.style.display = 'flex';
   popupEl.setAttribute('aria-hidden', 'false');
 }
+
 
 function showBatchResults(results, startMs, endMs) {
   console.log('[Batch] Results pages:', results.length, '+ 1 summary');
@@ -506,6 +532,7 @@ async function onPredictClick() {
 
   try {
     setLoading(true, 'Predicting...');
+    const selectedTestClass = testClassSelect?.value || '1';
 
     const results = [];
 
@@ -519,19 +546,22 @@ async function onPredictClick() {
       const tEnd = Date.now();
 
       results.push({
-        fileName: file.name,
-        previewSrc,
-        detections: json.detections || [],
-        process_time_sec: json.process_time_sec,
-        process_time_ms: json.process_time_ms,
-        tStart,
-        tEnd,
-      });
+  fileName: file.name,
+  previewSrc,
+  detections: json.detections || [],
+  process_time_sec: json.process_time_sec,
+  process_time_ms: json.process_time_ms,
+  tStart,
+  tEnd,
+  test_class: selectedTestClass,   // <— store once per batch run
+});
+
     }
 
-    // Overall times should reflect first and last image
+    // Overall times reflect first and last image (for reference only)
     const overallStart = results[0]?.tStart;
     const overallEnd = results[results.length - 1]?.tEnd;
+
     setLoading(false);
 
     // If none of the results have detections
@@ -554,7 +584,10 @@ async function onPredictClick() {
       });
       return;
     }
-
+    console.log('[DEBUG] process_time_sec list:', results.map(r => r.process_time_sec));
+console.log('[DEBUG] model-sum =', results.reduce((a, r) => a + (Number(r.process_time_sec) || 0), 0).toFixed(3),
+  's'
+);
     // Show paginated popup and sync overlay with selected page
     showBatchResults(results, overallStart, overallEnd);
 
@@ -583,5 +616,38 @@ function showInfo(text, title = 'Heads up') {
   };
   if (closeBtn) closeBtn.addEventListener('click', onClose);
   popup.addEventListener('click', (e) => { if (e.target === popup) onClose(); });
+}
+
+// ---- side preview helpers ----
+// ---- side preview helpers ----
+function openSidePreview(src) {
+  const panel = document.getElementById('imagePreviewPopup'); // side panel container
+  const img   = document.getElementById('sidePopupImage');    // <img> inside the panel
+  const close = document.getElementById('sidePreviewClose');  // close button (optional)
+
+  if (!panel || !img) return; // guard if DOM not present
+  img.src = src || '';
+  panel.style.display = 'block';
+  panel.setAttribute('aria-hidden', 'false');
+
+  if (close) {
+    // ensure we don't stack multiple listeners
+    close.onclick = closeSidePreview;
+  }
+  // click outside to close
+  panel.addEventListener('click', (e) => {
+    if (e.target === panel) closeSidePreview();
+  }, { once: true });
+}
+
+function closeSidePreview() {
+  const panel = document.getElementById('imagePreviewPopup');
+  const img   = document.getElementById('sidePopupImage');
+  if (!panel) return;
+  panel.style.display = 'none';
+  panel.setAttribute('aria-hidden', 'true');
+  if (img) img.src = '';
+  // if you draw overlays, clear them too
+  if (typeof clearCanvas === 'function') clearCanvas();
 }
 
