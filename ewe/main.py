@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from PIL import Image
 from ultralytics import YOLO
 import torchvision.transforms as transforms
+import time
 
 warnings.filterwarnings('ignore')
 
@@ -13,6 +14,7 @@ warnings.filterwarnings('ignore')
 # Device
 # -------------------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 # -------------------------------
 # TNI Model Definition
@@ -32,6 +34,7 @@ class TNIModel(torch.nn.Module):
         x = F.normalize(x, p=2, dim=1)
         return x
 
+
 # -------------------------------
 # Paths (relative to this file)
 # -------------------------------
@@ -40,7 +43,6 @@ MODEL_DIR = os.path.join(ROOT_DIR, "model")
 TNI_WEIGHTS_PATH = os.path.join(MODEL_DIR, "modeltni_elephant_model.pth")
 YOLO_WEIGHTS_PATH = os.path.join(MODEL_DIR, "elephant_obj_detect.pt")
 REF_EMB_PATH = os.path.join(MODEL_DIR, "reference_embeddings.pt")
-
 
 # -------------------------------
 # Load TNI Model
@@ -57,7 +59,16 @@ tni_model.eval()
 # -------------------------------
 # Load YOLO Model
 # -------------------------------
-yolo_model = YOLO(YOLO_WEIGHTS_PATH)
+yolo_model = YOLO("yolov8l.pt")
+def get_elephant_class_id(model):
+    names = getattr(model, "names", None)
+    if isinstance(names, dict):  # Ultralytics commonly exposes a dict {id: name}
+        for i, n in names.items():
+            if str(n).lower() == "elephant":
+                return int(i)
+    # Fallback to known COCO id
+    return 20
+
 
 # -------------------------------
 # Image transform for identification
@@ -75,6 +86,7 @@ try:
     reference_embeddings = torch.load(REF_EMB_PATH, map_location=device, weights_only=True)
 except TypeError:
     reference_embeddings = torch.load(REF_EMB_PATH, map_location=device)
+
 
 # -------------------------------
 # Function to identify elephant from cropped image (BGR ndarray)
@@ -102,6 +114,7 @@ def identify_elephant(cropped_frame, reference_embeddings, model, device):
 
     return identity, max_sim
 
+
 # ============================================================
 # Web helper (single-image inference) — used by FastAPI server
 # ============================================================
@@ -124,57 +137,59 @@ def _identify_from_ndarray_bgr(crop_bgr, model, refs, device, transform):
             best_sim, best_name = sim, name
     return best_name, best_sim
 
+
 def predict_on_frame(frame_bgr,
-                     conf_thres: float = 0.7,
+                     conf_thres: float = 0.90,
                      id_sim_thres: float = 0.98):
-    """
-    Run YOLO detection + TNI identification on a single BGR frame.
-    Returns a list of dicts matching your OpenCV overlay semantics:
-      {
-        "bbox": [x1, y1, x2, y2],
-        "yolo_label": "<class>",
-        "confidence": 0.87,
-        "identity": "Plai Khammoon" | "Unknown",
-        "similarity": 0.99,
-        "overlay_text": "Elephant: Plai Khammoon (87.0%) | Sim: 0.99"
-      }
-    """
+    start = time.perf_counter()
+
     import numpy as np
-    assert isinstance(frame_bgr, np.ndarray) and frame_bgr.ndim == 3 and frame_bgr.shape[2] == 3, \
-        "predict_on_frame expects an OpenCV BGR image (HxWx3)."
+    eid = get_elephant_class_id(yolo_model)
 
-    results = yolo_model(frame_bgr)[0]
-    outs = []
+    # Run YOLO with class + confidence constraints
+    results = yolo_model.predict(
+        frame_bgr,
+        conf=conf_thres,
+        classes=[eid],         # ← only elephants
+        verbose=False
+    )[0]
 
+    # Pick only the largest elephant detection
+    largest = None  # (area, (x1,y1,x2,y2), conf)
     for box in results.boxes:
-        conf = float(box.conf)
+        conf = float(box.conf.item() if hasattr(box.conf, "item") else box.conf)
         if conf < conf_thres:
             continue
-
         x1, y1, x2, y2 = map(int, box.xyxy[0])
-        cls_id = int(box.cls[0])
-        yolo_lbl = yolo_model.names[cls_id] if hasattr(yolo_model, "names") else str(cls_id)
-
-        crop = frame_bgr[y1:y2, x1:x2]
-        if crop.size == 0 or crop.shape[0] < 20 or crop.shape[1] < 20:
+        w, h = max(0, x2 - x1), max(0, y2 - y1)
+        if w < 20 or h < 20:
             continue
+        area = w * h
+        if largest is None or area > largest[0]:
+            largest = (area, (x1, y1, x2, y2), conf)
 
-        name, sim = _identify_from_ndarray_bgr(
-            crop, tni_model, reference_embeddings, device, transform
-        )
+    outs = []
+    if largest is not None:
+        _, (x1, y1, x2, y2), conf = largest
+        crop = frame_bgr[y1:y2, x1:x2]
+        name, sim = _identify_from_ndarray_bgr(crop, tni_model, reference_embeddings, device, transform)
         final_name = name if (sim is not None and sim >= id_sim_thres) else "Unknown"
-        overlay_text = f"Elephant: {final_name} ({conf*100:.1f}%) | Sim: {sim:.2f}"
-
+        text = f"Elephant: {final_name} ({conf*100:.1f}%) | Sim: {sim:.2f}"
         outs.append({
             "bbox": [x1, y1, x2, y2],
-            "yolo_label": yolo_lbl,
+            "yolo_label": "elephant",
             "confidence": conf,
             "identity": final_name,
             "similarity": float(sim if sim is not None else 0.0),
-            "overlay_text": overlay_text
+            "overlay_text": text
         })
 
-    return outs
+    elapsed = time.perf_counter() - start
+    return {
+        "detections": outs,
+        "process_time_sec": round(elapsed, 4),
+        "process_time_ms": round(elapsed * 1000, 2),
+    }
 
 # ============================================================
 # Desktop video loop — only runs when executing this file directly
@@ -190,7 +205,7 @@ if __name__ == "__main__":
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-    CONFIDENCE_THRESHOLD = 0.7
+    CONFIDENCE_THRESHOLD = 0.9
     IDENTIFICATION_THRESHOLD = 0.98  # Minimum similarity for identification
 
     print("🎥 Starting video processing...")
@@ -202,40 +217,47 @@ if __name__ == "__main__":
             print("❌ End of video or cannot read frame")
             break
 
-        results = yolo_model(frame)[0]
+        # Only consider elephants and pick the largest detection
+        eid = get_elephant_class_id(yolo_model)
+        results = yolo_model.predict(
+            frame,
+            conf=CONFIDENCE_THRESHOLD,
+            classes=[eid],
+            verbose=False
+        )[0]
 
+        largest = None  # (area, (x1,y1,x2,y2), conf)
         for box in results.boxes:
-            conf = float(box.conf)
-            if conf < CONFIDENCE_THRESHOLD:
-                continue
-
+            conf = float(box.conf.item() if hasattr(box.conf, "item") else box.conf)
             x1, y1, x2, y2 = map(int, box.xyxy[0])
-            cls_id = int(box.cls[0])
-            label = yolo_model.names[cls_id] if hasattr(yolo_model, "names") else str(cls_id)
-
-            cropped_elephant = frame[y1:y2, x1:x2]
-            if cropped_elephant.shape[0] < 50 or cropped_elephant.shape[1] < 50:
+            w, h = max(0, x2 - x1), max(0, y2 - y1)
+            if w < 50 or h < 50:
                 continue
+            area = w * h
+            if largest is None or area > largest[0]:
+                largest = (area, (x1, y1, x2, y2), conf)
+
+        if largest is not None:
+            _, (x1, y1, x2, y2), conf = largest
+            cropped_elephant = frame[y1:y2, x1:x2]
 
             identity, similarity = identify_elephant(
                 cropped_elephant, reference_embeddings, tni_model, device
             )
 
+            # Only show the single largest detection if it meets identification threshold
             if similarity > IDENTIFICATION_THRESHOLD:
-                color = (0, 255, 0)  # Green
+                color = (0, 255, 0)  # Green for confident identification
                 text = f"{identity} ({similarity:.2f})"
-            else:
-                color = (0, 165, 255)  # Orange
-                text = f"Unknown Elephant ({conf:.2f})"
 
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
-            (text_width, text_height), _ = cv2.getTextSize(
-                text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
-            )
-            cv2.rectangle(frame, (x1, y1 - text_height - 10), (x1 + text_width, y1), color, -1)
-            cv2.putText(frame, text, (x1, y1 - 5),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+                (text_width, text_height), _ = cv2.getTextSize(
+                    text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
+                )
+                cv2.rectangle(frame, (x1, y1 - text_height - 10), (x1 + text_width, y1), color, -1)
+                cv2.putText(frame, text, (x1, y1 - 5),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
 
         cv2.imshow("Elephant Detection & Identification", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):

@@ -216,6 +216,136 @@ input[type="file"]{
   background: var(--ok-strong);
   transform: translateY(-1px);
 }
+/* Loading overlay */
+.loading-overlay{
+  position: fixed;
+  inset: 0;
+  display: none;               /* toggled by JS */
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(2px);
+  z-index: 9999;
+}
+
+.loading-card{
+  background: #ffffff;
+  padding: 40px 50px;
+  border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  min-width: 300px;
+  min-height: 200px;
+  transform: scale(1);
+  animation: popIn 0.25s ease;
+}
+
+.loading-spinner{
+  width: 80px;
+  height: 80px;
+  border: 6px solid rgba(0,0,0,0.12);
+  border-top-color: #ff8a3d;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+.loading-text{
+  font-size: 20px;
+  color: #333;
+  font-weight: 500;
+  text-align: center;
+}
+/* --- Results Popup --- */
+/* --- Results Popup --- */
+.results-popup {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(3px);
+  z-index: 9998;
+}
+
+.results-popup-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  width: 440px;
+  max-width: 90%;
+  padding: 35px 30px 30px;
+  text-align: center;
+  animation: popupIn 0.25s ease-out;
+}
+
+.popup-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 20px;
+}
+
+.popup-results-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 25px;
+  text-align: left;
+}
+
+.popup-results-list li {
+  background: #fafafa;
+  border-radius: 10px;
+  padding: 10px 15px;
+  margin-bottom: 10px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.popup-results-list li strong {
+  color: #ff8a3d;
+}
+
+/* Centered Exit button */
+.popup-exit-btn {
+  background: linear-gradient(135deg, #ff8a3d, #ffb64d);
+  color: #fff;
+  border: none;
+  padding: 10px 40px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s ease, transform 0.2s ease;
+}
+
+.popup-exit-btn:hover {
+  background: linear-gradient(135deg, #ff7a1c, #ffa632);
+  transform: translateY(-2px);
+}
+
+@keyframes popupIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+
+
+@keyframes popIn{
+  from{ transform: scale(0.95); opacity: 0; }
+  to{ transform: scale(1); opacity: 1; }
+}
+
 
 /* ===========================
    8) Small screens
@@ -225,3 +355,138 @@ input[type="file"]{
   .container{ padding:20px }
   #predictButton{ width:100% }
 }
+/* Fixed cute elephant GIF at the bottom-left corner */
+.corner-elephant {
+  position: fixed;
+  left: 20px;               /* changed from right to left */
+  bottom: 20px;
+  z-index: 900;             /* ensures visibility above content but below popups */
+  width: 100px;             /* adjust to taste */
+  height: auto;
+  pointer-events: none;     /* doesn’t block clicks */
+  opacity: 0.85;
+  transition: opacity 0.3s ease;
+}
+
+.corner-elephant img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.corner-elephant:hover {
+  opacity: 1.0;
+}
+
+@media (max-width: 600px) {
+  .corner-elephant {
+    width: 70px;
+    left: 12px;
+    bottom: 12px;
+  }
+}
+/* No-results message styling */
+.no-results {
+  margin-top: 16px;
+  text-align: center;
+  color: #555;
+  font-size: 16px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+  padding: 12px 16px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  display: inline-block;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* --- No Results Popup --- */
+.no-results-popup {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(3px);
+  z-index: 9998;
+}
+
+.no-results-popup-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  width: 380px;
+  max-width: 90%;
+  padding: 35px 30px 30px;
+  text-align: center;
+  animation: popupIn 0.25s ease-out;
+}
+
+.no-results-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 12px;
+}
+
+.no-results-text {
+  font-size: 16px;
+  color: #666;
+  margin-bottom: 25px;
+}
+
+.no-results-exit-btn {
+  background: linear-gradient(135deg, #ff8a3d, #ffb64d);
+  color: #fff;
+  border: none;
+  padding: 10px 40px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s ease, transform 0.2s ease;
+}
+
+.no-results-exit-btn:hover {
+  background: linear-gradient(135deg, #ff7a1c, #ffa632);
+  transform: translateY(-2px);
+}
+
+@keyframes popupIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+/* Reusable modal */
+.modal-overlay{
+  position: fixed; inset: 0;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.4); backdrop-filter: blur(3px);
+  z-index: 9998;
+}
+.modal-card{
+  background:#fff; border-radius:16px; box-shadow:0 12px 40px rgba(0,0,0,0.25);
+  width: 380px; max-width: 90%;
+  padding: 35px 30px 30px; text-align:center;
+  animation: popupIn 0.25s ease-out;
+}
+.modal-title{ font-size:22px; font-weight:600; color:#333; margin-bottom:12px; }
+.modal-text{ font-size:16px; color:#666; margin-bottom:25px; }
+.modal-btn{
+  background: linear-gradient(135deg,#ff8a3d,#ffb64d);
+  color:#fff; border:none; padding:10px 40px; border-radius:8px;
+  font-size:16px; font-weight:600; cursor:pointer;
+  transition: background .3s ease, transform .2s ease;
+}
+.modal-btn:hover{ background:linear-gradient(135deg,#ff7a1c,#ffa632); transform: translateY(-2px); }
+
+@keyframes popupIn{ from{transform:scale(.95);opacity:0} to{transform:scale(1);opacity:1} }
+
+
+
+
+

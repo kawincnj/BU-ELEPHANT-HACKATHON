@@ -85,36 +85,80 @@ function clearCanvas() {
   if (overlayCtx && overlayCanvas) overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 }
 
+// Helper to format timestamps as YYYY-MM-DD HH:MM:SS.hh (hundredths)
+function formatDateTimeHundredths(ms) {
+  const d = new Date(ms);
+  const pad = (n, l = 2) => String(n).padStart(l, '0');
+  const YYYY = d.getFullYear();
+  const MM = pad(d.getMonth() + 1);
+  const DD = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mm = pad(d.getMinutes());
+  const ss = pad(d.getSeconds());
+  const hundredths = pad(Math.floor(d.getMilliseconds() / 10));
+  return `${YYYY}-${MM}-${DD} ${hh}:${mm}:${ss}.${hundredths}`;
+}
+
+// Helper to format timestamps as HH:MM:SS.hh (hundredths)
+function formatTimeHundredths(ms) {
+  const d = new Date(ms);
+  const pad = (n, l = 2) => String(n).padStart(l, '0');
+  const hh = pad(d.getHours());
+  const mm = pad(d.getMinutes());
+  const ss = pad(d.getSeconds());
+  const hundredths = pad(Math.floor(d.getMilliseconds() / 10));
+  return `${hh}:${mm}:${ss}.${hundredths}`;
+}
+
+// Pick the single largest detection by bbox area
+function pickLargestDetection(dets = []) {
+  let best = null;
+  let bestArea = -1;
+  for (const d of dets) {
+    if (!d || !Array.isArray(d.bbox) || d.bbox.length < 4) continue;
+    const [x1, y1, x2, y2] = d.bbox.map(Number);
+    const w = Math.max(0, x2 - x1);
+    const h = Math.max(0, y2 - y1);
+    const area = w * h;
+    if (area > bestArea) {
+      bestArea = area;
+      best = d;
+    }
+  }
+  return best;
+}
+
 function drawDetections(dets, naturalW, naturalH) {
   ensureCanvas();
   clearCanvas();
   const scaleX = imagePreview.clientWidth / naturalW;
   const scaleY = imagePreview.clientHeight / naturalH;
 
-  dets.forEach(d => {
-    const [x1, y1, x2, y2] = d.bbox;
-    const rx1 = Math.round(x1 * scaleX);
-    const ry1 = Math.round(y1 * scaleY);
-    const rx2 = Math.round(x2 * scaleX);
-    const ry2 = Math.round(y2 * scaleY);
-    const w = rx2 - rx1;
-    const h = ry2 - ry1;
+  const d = pickLargestDetection(dets);
+  if (!d) return;
 
-    // Box
-    overlayCtx.lineWidth = 3;
-    overlayCtx.strokeStyle = 'rgba(0, 255, 0, 0.85)';
-    overlayCtx.strokeRect(rx1, ry1, w, h);
+  const [x1, y1, x2, y2] = d.bbox;
+  const rx1 = Math.round(x1 * scaleX);
+  const ry1 = Math.round(y1 * scaleY);
+  const rx2 = Math.round(x2 * scaleX);
+  const ry2 = Math.round(y2 * scaleY);
+  const w = rx2 - rx1;
+  const h = ry2 - ry1;
 
-    // Label
-    const label = d.overlay_text || `${d.identity} (${(d.confidence*100).toFixed(1)}%)`;
-    overlayCtx.font = '14px Arial';
-    const textW = overlayCtx.measureText(label).width + 8;
-    const textH = 18;
-    overlayCtx.fillStyle = 'rgba(0,0,0,0.6)';
-    overlayCtx.fillRect(rx1, Math.max(0, ry1 - textH), textW, textH);
-    overlayCtx.fillStyle = 'white';
-    overlayCtx.fillText(label, rx1 + 4, ry1 - 4);
-  });
+  // Box
+  overlayCtx.lineWidth = 3;
+  overlayCtx.strokeStyle = 'rgba(0, 255, 0, 0.85)';
+  overlayCtx.strokeRect(rx1, ry1, w, h);
+
+  // Label
+  const label = d.overlay_text || `${d.identity} (${(d.confidence*100).toFixed(1)}%)`;
+  overlayCtx.font = '14px Arial';
+  const textW = overlayCtx.measureText(label).width + 8;
+  const textH = 18;
+  overlayCtx.fillStyle = 'rgba(0,0,0,0.6)';
+  overlayCtx.fillRect(rx1, Math.max(0, ry1 - textH), textW, textH);
+  overlayCtx.fillStyle = 'white';
+  overlayCtx.fillText(label, rx1 + 4, ry1 - 4);
 }
 
 // Handle file selection (image or video)
@@ -143,25 +187,120 @@ fileUploader.addEventListener('change', (event) => {
 });
 
 function setLoading(on, msg = 'Predicting...') {
-  statusRow.style.display = on ? 'block' : 'none';
-  statusText.textContent = msg;
+  const overlay = document.getElementById('loadingOverlay');
+  const msgEl   = document.getElementById('loadingMessage');
+
+  if (overlay && msgEl) {
+    msgEl.textContent = msg;
+    overlay.style.display = on ? 'flex' : 'none';
+    overlay.setAttribute('aria-hidden', on ? 'false' : 'true');
+  }
+
+  // prevent background scrolling/clicks
+  document.body.style.overflow = on ? 'hidden' : '';
+
+  // keep your existing button lock
   predictButton.disabled = on;
+
+  // fail-safe so it never stays stuck
+  if (on) {
+    clearTimeout(setLoading._fuse);
+    setLoading._fuse = setTimeout(() => {
+      if (overlay) overlay.style.display = 'none';
+      predictButton.disabled = false;
+      document.body.style.overflow = '';
+      console.warn('[Loading] Auto-dismissed after 20s failsafe.');
+    }, 20000);
+  } else {
+    clearTimeout(setLoading._fuse);
+  }
 }
 
-function showList(dets) {
-  resultsList.innerHTML = '';
-  dets.forEach(d => {
+
+function showPopupResults(payload, startMs, endMs) {
+  const dets = Array.isArray(payload) ? payload : (payload?.detections || []);
+  const processTimeSec =
+    Array.isArray(payload)
+      ? null
+      : (payload.process_time_sec ?? (payload.process_time_ms ? (payload.process_time_ms / 1000) : null));
+
+  const popup = document.getElementById('resultsPopup');
+  const list = document.getElementById('popupResultsList');
+  const closeBtn = document.getElementById('popupCloseBtn');
+
+  list.innerHTML = '';
+
+  const d = pickLargestDetection(dets);
+  if (d) {
+    const conf = Number(d?.confidence ?? 0);
+    const sim  = Number(d?.similarity ?? d?.sim ?? 0);
+    const name = (d?.identity && d.identity !== 'Unknown') ? d.identity : 'Unknown Elephant';
+
     const li = document.createElement('li');
-    li.textContent = d.overlay_text || `${d.identity} (${(d.confidence*100).toFixed(1)}%) | Sim: ${d.similarity.toFixed(2)}`;
-    resultsList.appendChild(li);
+    li.innerHTML = `
+      <strong>${name}</strong><br>
+      Confidence: ${(conf * 100).toFixed(1)}%<br>
+      Similarity: ${sim.toFixed(2)}
+    `;
+    list.appendChild(li);
+  }
+
+  // Add timestamps above the processed-in line if available
+  if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
+    const rangeEl = document.createElement('li');
+    rangeEl.innerHTML = `<em>Start: ${formatDateTimeHundredths(startMs)} <br> End: ${formatDateTimeHundredths(endMs)}</em>`;
+    list.appendChild(rangeEl);
+  }
+
+  if (processTimeSec !== null) {
+    const timeEl = document.createElement('li');
+    timeEl.innerHTML = `<em>⏱ Processed in ${processTimeSec.toFixed(2)} s</em>`;
+    timeEl.style.textAlign = 'right';
+    list.appendChild(timeEl);
+  }
+
+  popup.style.display = 'flex';
+  popup.setAttribute('aria-hidden', 'false');
+
+  closeBtn.onclick = () => {
+    popup.style.display = 'none';
+    popup.setAttribute('aria-hidden', 'true');
+  };
+
+  popup.addEventListener('click', e => {
+    if (e.target === popup) {
+      popup.style.display = 'none';
+      popup.setAttribute('aria-hidden', 'true');
+    }
   });
-  resultsCard.style.display = 'block';
 }
 
-function hideList() {
-  resultsCard.style.display = 'none';
-  resultsList.innerHTML = '';
+function showInfo(message, title = 'Heads up') {
+  const overlay = document.getElementById('infoPopup');
+  const t = document.getElementById('infoTitle');
+  const txt = document.getElementById('infoText');
+  const btn = document.getElementById('infoCloseBtn');
+
+  t.textContent = title;
+  txt.textContent = message;
+
+  overlay.style.display = 'flex';
+  overlay.setAttribute('aria-hidden', 'false');
+
+  const close = () => {
+    overlay.style.display = 'none';
+    overlay.setAttribute('aria-hidden', 'true');
+    btn.removeEventListener('click', close);
+    overlay.removeEventListener('click', outside);
+  };
+  const outside = (e) => { if (e.target === overlay) close(); };
+
+  btn.addEventListener('click', close);
+  overlay.addEventListener('click', outside);
 }
+
+
+
 
 async function postImage(url, file) {
   const form = new FormData();
@@ -196,35 +335,51 @@ function extractVideoFrame(file) {
   });
 }
 
-predictButton.addEventListener('click', async () => {
+// --- helper to clear results ---
+function hideList() {
+  resultsCard.style.display = 'none';
+  resultsList.innerHTML = '';
+}
+
+// --- wait for DOM before binding ---
+document.addEventListener('DOMContentLoaded', () => {
+  if (!predictButton) {
+    console.error('[UI] #predictButton not found.');
+    return;
+  }
+  predictButton.addEventListener('click', onPredictClick);
+  console.log('[UI] Predict handler attached');
+});
+
+// --- main click handler ---
+async function onPredictClick() {
+  console.log('[UI] Predict clicked');
   hideList();
   clearCanvas();
 
   const file = fileUploader.files[0];
   if (!file) {
-    alert('Please select a file before Predicting!');
+    showInfo('Please select a file before Predicting!', 'No file selected');
     return;
   }
 
   const isImage = file.type.startsWith('image/');
   const isVideo = file.type.startsWith('video/');
   if (!isImage && !isVideo) {
-    alert('File format not supported.');
+    showInfo('File format not supported.');
     return;
   }
 
   try {
     setLoading(true, 'Predicting...');
-
     let toSend = file;
+
     if (isVideo) {
       setLoading(true, 'Pulling frame from video...');
       toSend = await extractVideoFrame(file);
-
-      // Show the extracted frame as preview
-      await new Promise((resolve) => {
+      await new Promise(resolve => {
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = e => {
           imagePreview.src = e.target.result;
           imagePreview.onload = () => {
             imagePreview.style.display = 'block';
@@ -235,13 +390,11 @@ predictButton.addEventListener('click', async () => {
         };
         reader.readAsDataURL(toSend);
       });
-
       setLoading(true, 'Predicting...');
     } else if (isImage && (!imagePreview.src || imagePreview.src === '#')) {
-      // Ensure preview exists for images even if user skipped viewing
-      await new Promise((resolve) => {
+      await new Promise(resolve => {
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = e => {
           imagePreview.src = e.target.result;
           imagePreview.onload = () => {
             imagePreview.style.display = 'block';
@@ -254,17 +407,41 @@ predictButton.addEventListener('click', async () => {
       });
     }
 
+    const tStart = Date.now();
     const json = await postImage(API_RUN_MAIN, toSend);
-    const dets = json.detections || [];
+    const tEnd = Date.now();
     setLoading(false);
 
+    const dets = json.detections || [];
+    const noResultsMessage = document.getElementById('noResultsMessage');
+    const noResultsPopup = document.getElementById('noResultsPopup');
+    const noResultsCloseBtn = document.getElementById('noResultsCloseBtn');
+
     if (!dets.length) {
-      alert('No results found');
+      setLoading(false);
+
+      noResultsPopup.style.display = 'flex';
+      noResultsPopup.setAttribute('aria-hidden', 'false');
+
+      noResultsCloseBtn.onclick = () => {
+        noResultsPopup.style.display = 'none';
+        noResultsPopup.setAttribute('aria-hidden', 'true');
+      };
+
+      noResultsPopup.addEventListener('click', (e) => {
+        if (e.target === noResultsPopup) {
+          noResultsPopup.style.display = 'none';
+          noResultsPopup.setAttribute('aria-hidden', 'true');
+        }
+      });
+
       return;
     }
 
-    showList(dets);
+    // Only show largest detection in popup, with timestamps
+    showPopupResults(json, tStart, tEnd);
 
+    // Drawing: only draw the largest detection
     const imgTmp = new Image();
     imgTmp.onload = () => {
       drawDetections(dets, imgTmp.naturalWidth, imgTmp.naturalHeight);
@@ -273,7 +450,9 @@ predictButton.addEventListener('click', async () => {
 
   } catch (err) {
     console.error(err);
+    showInfo('An error occurred during prediction');
+  } finally {
     setLoading(false);
-    alert('An error occurred during prediction');
   }
-});
+}
+

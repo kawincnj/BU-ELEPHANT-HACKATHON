@@ -4,12 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <title>Elephant Identification</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./style.css" />
   <style>
     /* Light theme using provided palette */
     :root { color-scheme: light; }
     body {
-      background: #F1F7ED; /* Background */
+      background-image: url("elephant.png");
+      /*background: #F1F7ED; !* Background *!*/
       font-family: Arial, sans-serif;
       margin: 0;
       color: #1D1A1B; /* Text */
@@ -64,6 +65,47 @@
     .horse-caption { margin-top: 10px; color:#1D1A1B; font-size: 14px; line-height: 1.4; text-align: left; }
   </style>
 </head>
+<!-- Loading overlay -->
+<div id="loadingOverlay" class="loading-overlay" role="dialog" aria-modal="true" aria-label="Loading" aria-hidden="true">
+  <div class="loading-card">
+    <div class="loading-spinner" aria-hidden="true"></div>
+    <div id="loadingMessage" class="loading-text">Predicting...</div>
+  </div>
+</div>
+<!-- Results Popup -->
+<!-- Results Popup -->
+<div id="resultsPopup" class="results-popup" aria-hidden="true">
+  <div class="results-popup-card">
+    <h2 class="popup-title">Prediction Results</h2>
+    <ul id="popupResultsList" class="popup-results-list"></ul>
+    <button id="popupCloseBtn" class="popup-exit-btn">Exit</button>
+  </div>
+</div>
+<!-- Floating Elephant Animation -->
+<!-- Bottom-left CodePen embed: Dancing Elephant -->
+<!-- Bottom-left CodePen embed (Elmzarnsi / WpREwZ) -->
+<div class="corner-elephant">
+  <img src="elephant.gif" alt="Cute Elephant Animation" />
+</div>
+
+<!-- No Results Popup -->
+<div id="noResultsPopup" class="no-results-popup" aria-hidden="true">
+  <div class="no-results-popup-card">
+    <h2 class="no-results-title">🐘 No Elephant Detected</h2>
+    <p class="no-results-text">Please try another image or video.</p>
+    <button id="noResultsCloseBtn" class="no-results-exit-btn">OK</button>
+  </div>
+</div>
+<!-- Generic Info Popup -->
+<div id="infoPopup" class="modal-overlay" aria-hidden="true">
+  <div class="modal-card">
+    <h2 id="infoTitle" class="modal-title">Heads up</h2>
+    <p id="infoText" class="modal-text">Message goes here.</p>
+    <button id="infoCloseBtn" class="modal-btn">OK</button>
+  </div>
+</div>
+
+
 <body>
   <header>
     <h1>🐘ELEPHANT IDENTIFICATION WEBSITE🐘</h1>
@@ -102,6 +144,11 @@
       <div style="font-weight:600;margin-bottom:6px;">Predictions</div>
       <ol id="resultsList" style="margin:0;padding-left:20px;"></ol>
     </div>
+    <!-- Message shown when no elephant is detected -->
+<div id="noResultsMessage" class="no-results" style="display: none;">
+  🐘 No elephant detected. Please try another image.
+</div>
+
   </div>
 
   <button id="toggleElephantBtn" title="Toggle elephant">🐘</button>
