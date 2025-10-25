@@ -211,10 +211,10 @@ function showList(dets) {
     fieldsContainer.className = 'ri-details-table';
     
     // Row 1: Test Class / Identity
-    fieldsContainer.appendChild(createDetailRow('Test Class:', identityName));
+    fieldsContainer.appendChild(createDetailRow('Predicted Class:', identityName));
     
     // Row 2: Predict Class (HARDCODED TO 'elephant')
-    fieldsContainer.appendChild(createDetailRow('Predict Class:', predictedClassValue));
+    // fieldsContainer.appendChild(createDetailRow('Predict Class:', predictedClassValue));
     
     // COMMENTED OUT: Row 3: Confidence (3 decimal places) - Removed as requested
     /*
@@ -223,7 +223,7 @@ function showList(dets) {
 
     // Row 3 (was 4): Sim Confidence (Similarity) - Now displayed as a percentage (x100)
     if (d.similarity !== undefined) {
-        fieldsContainer.appendChild(createDetailRow('Sim Confidence:', `${(d.similarity * 100).toFixed(3)}%`, 'similarity-row'));
+        fieldsContainer.appendChild(createDetailRow('Confidence:', `${(d.similarity * 100).toFixed(3)}%`, 'similarity-row'));
     }
 
     // --- Time details are added only to the FIRST result item for clarity ---
@@ -235,7 +235,7 @@ function showList(dets) {
         fieldsContainer.appendChild(createDetailRow('End Time:', endTimeDisplay, 'time-row'));
         
         // Row 6 (was 7): Time Elapsed (3 decimal places)
-        fieldsContainer.appendChild(createDetailRow('Time Elapsed:', `${lastElapsed ? lastElapsed.toFixed(3) : '0.000'} s`, 'elapsed-time-row'));
+        fieldsContainer.appendChild(createDetailRow('Time using:', `${lastElapsed ? lastElapsed.toFixed(3) : '0.000'} second`, 'elapsed-time-row'));
     }
 
     li.appendChild(fieldsContainer);
